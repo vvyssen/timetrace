@@ -40,7 +40,7 @@ fi
 open -g -a ActivityWatch || true
 
 step "安装 timetrace 和 iPhone/iPad 导入器" "Installing timetrace and the iPhone/iPad importer"
-uv tool install --force --python "$PY" "$SOURCE"
+uv tool install --force --reinstall --python "$PY" "$SOURCE"   # --reinstall: never reuse a stale build of the same version
 uv tool install --force --python "$PY" "$IMPORTER"
 
 step "安装后台服务和应用" "Installing background services and apps"
