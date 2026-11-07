@@ -169,9 +169,12 @@ def conflicts():
             out.append(f"port {port} is already used by pid {pid}")
     r = _run(["pgrep", "-fl", "aw_import_screentime|aw-import-screentime"])
     imp = _run(["launchctl", "print", f"{_domain()}/{labels()['importer']}"]).stdout
+    helper_pid = next((l.split("=")[1].strip() for l in imp.splitlines() if l.strip().startswith("pid =")), None)
     for line in r.stdout.splitlines():
         pid = line.split()[0]
-        if "timetrace-importer" not in line and f"pid = {pid}" not in imp:
+        ppid = _run(["ps", "-o", "ppid=", "-p", pid]).stdout.strip()
+        ours = "timetrace-importer" in line or pid == helper_pid or (helper_pid and ppid == helper_pid)
+        if not ours:  # the importer our helper spawned is a child of the helper, not a rival
             out.append(f"another Screen Time importer is running (pid {pid}): {line[:120]}")
     return out
 
