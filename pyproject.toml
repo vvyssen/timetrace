@@ -5,7 +5,7 @@ description = "Automatic time tracking across Mac, iPhone and iPad — by purpos
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-authors = [{ name = "Wissen" }]
+authors = [{ name = "vvyssen" }]
 keywords = ["time-tracking", "screen-time", "activitywatch", "macos", "iphone", "mcp", "agents"]
 classifiers = [
     "Operating System :: MacOS",
