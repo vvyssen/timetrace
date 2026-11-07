@@ -67,6 +67,23 @@ def resolve(params):
     return "today", today, now
 
 
+def lane_of(rows, split):
+    """Device grouping: by kind ("iPhone") in the combined view; in the detailed view each device of a kind
+    that has several gets its own lane, keyed "kind:name" (the client formats it as "iPhone（name）")."""
+    if not split:
+        return lambda r: r["kind"]
+    names = collections.defaultdict(set)
+    for r in rows:
+        names[r["kind"]].add(r["device"])
+    multi = {k for k, v in names.items() if len(v) > 1}
+    return lambda r: f'{r["kind"]}:{r["device"]}' if r["kind"] in multi else r["kind"]
+
+
+def lane_rank(k):
+    kind, _, name = k.partition(":")
+    return (["Mac", "iPhone", "iPad"].index(kind) if kind in ("Mac", "iPhone", "iPad") else 9, name.lower())
+
+
 def pieces(r, start, end, unit):
     """Split an interval's active seconds across local hours or days, clipped to [start, end]."""
     s, e = max(r["start"], start), min(r["end"], end)
@@ -92,6 +109,7 @@ def build(params):
     u = cfg["uncategorized"]
     rng, start, end = resolve(params)
     rows = I.fetch_intervals(start, end, params.get("device", "all"), cfg)
+    lane = lane_of(rows, params.get("split") == "1")
     total, by_eval = 0.0, evals_dict(order)
     by_dev = collections.defaultdict(lambda: evals_dict(order))
     days = collections.OrderedDict()
@@ -122,21 +140,21 @@ def build(params):
             continue
         total += clipped
         by_eval[ev] += clipped
-        by_dev[r["kind"]][ev] += clipped
+        by_dev[lane(r)][ev] += clipped
         dm = dom[r["domain"]]
         dm["evals"][ev] += clipped
         dm["subs"][r["subdomain"] or "—"][ev] += clipped
         pk = (r["domain"], r["subdomain"] or "", r["project"] or r["app"])
         proj[pk]["evals"][ev] += clipped
-        proj[pk]["devices"].add(r["kind"])
-        ak = (r["kind"], r["app"])
+        proj[pk]["devices"].add(lane(r))
+        ak = (lane(r), r["app"])
         apps[ak]["evals"][ev] += clipped
         apps[ak]["domain"] = "/".join(x for x in (r["domain"], r["subdomain"]) if x)
         apps[ak]["project"] = r["project"]
     tot = lambda e: sum(e.values())
     domains = [{"name": n, "evals": v["evals"], "subs": [{"name": s, "evals": e} for s, e in sorted(v["subs"].items(), key=lambda kv: -tot(kv[1]))]}
                for n, v in sorted(dom.items(), key=lambda kv: -tot(kv[1]["evals"]))]
-    projects = [{"project": k[2], "domain": k[0], "subdomain": k[1], "devices": sorted(v["devices"]), "evals": v["evals"]}
+    projects = [{"project": k[2], "domain": k[0], "subdomain": k[1], "devices": sorted(v["devices"], key=lane_rank), "evals": v["evals"]}
                 for k, v in sorted(proj.items(), key=lambda kv: -tot(kv[1]["evals"]))[:15]]
     app_rows = [{"device": k[0], "app": k[1], "domain": v["domain"], "project": v["project"], "evals": v["evals"]}
                 for k, v in sorted(apps.items(), key=lambda kv: -tot(kv[1]["evals"]))[:40]]
@@ -145,12 +163,12 @@ def build(params):
         for r in I.merge_timeline([r for r in rows if r["seconds"] >= 5], 60):
             s, e = max(r["start"], start), min(r["end"], end)
             if (e - s).total_seconds() >= 20:
-                timeline.append({"device": r["kind"], "start": s.astimezone(I.LOCAL).isoformat(), "end": e.astimezone(I.LOCAL).isoformat(),
+                timeline.append({"device": lane(r), "start": s.astimezone(I.LOCAL).isoformat(), "end": e.astimezone(I.LOCAL).isoformat(),
                                  "app": r["app"], "project": r["project"], "domain": r["domain"], "subdomain": r["subdomain"],
                                  "evaluation": r["evaluation"], "rule": r.get("duration_rule") or ""})
     return {"meta": meta(), "range": {"key": rng, "start": start.isoformat(), "end": end.isoformat(), "days": len(days)},
-            "device": params.get("device", "all"), "generated_at": datetime.now(I.LOCAL).isoformat(),
-            "total": total, "by_eval": by_eval, "by_device": by_dev,
+            "device": params.get("device", "all"), "split": params.get("split") == "1", "generated_at": datetime.now(I.LOCAL).isoformat(),
+            "total": total, "by_eval": by_eval, "by_device": dict(sorted(by_dev.items(), key=lambda kv: lane_rank(kv[0]))),
             "daily": [{"date": k, "evals": v} for k, v in days.items()],
             "hourly": [{"hour": h, "evals": v} for h, v in enumerate(hours)],
             "heat": {"evals": order, "days": [{"date": k, "h": [[round(x) for x in hr] for hr in v]} for k, v in heat.items()]} if heat else None,
@@ -186,13 +204,14 @@ def build_calendar(params):
     slot_sec = slot_min * 60
     min_active = max(60, slot_sec * 0.1)
     rows = I.fetch_intervals(week0, end, params.get("device", "all"), cfg) if end > week0 else []
+    lane_key = lane_of(rows, params.get("split") == "1")
     wd = WEEKDAYS.get(lang, WEEKDAYS["en"])
     days = [{"date": (week0 + timedelta(days=i)).date().isoformat(), "weekday": ("周" + wd[i]) if lang == "zh" else wd[i], "evals": evals_dict(order)} for i in range(7)]
     slots = collections.defaultdict(lambda: {"evals": evals_dict(order), "proj": collections.Counter(), "apps": collections.Counter(), "meta": {}})
     lanes = []
     for r in rows:
         ev = r["evaluation"] if r["evaluation"] in order else cfg["uncategorized"]
-        lane = r["kind"]
+        lane = lane_key(r)
         if lane not in lanes:
             lanes.append(lane)
         pk = r["project"] or r["app"]
@@ -206,7 +225,7 @@ def build_calendar(params):
             i = (datetime.fromisoformat(k).date() - week0.date()).days
             if 0 <= i < 7:
                 days[i]["evals"][ev] += sec
-    lanes.sort(key=lambda x: ["Mac", "iPhone", "iPad"].index(x) if x in ("Mac", "iPhone", "iPad") else 9)
+    lanes.sort(key=lane_rank)
     per_day = 24 * 60 // slot_min
     blocks = []
     for lane in lanes:

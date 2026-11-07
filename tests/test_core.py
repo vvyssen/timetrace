@@ -255,3 +255,21 @@ def test_devices_come_from_activitywatch_buckets(srv, monkeypatch):
     assert I.device_match("ios", "Work iPhone", "name:work iphone")
     assert not I.device_match("ios", "Work iPhone 2", "name:work iphone")
     assert I.device_match("ios", "Work iPhone 2", "work iphone")
+
+
+def test_detailed_view_splits_devices_of_one_kind(srv, monkeypatch):
+    server, I = srv["server"], srv["I"]
+    now = dt.datetime.now(I.LOCAL).replace(minute=0, second=0, microsecond=0) - dt.timedelta(hours=1)
+
+    def r(device, kind, minutes):
+        return {"start": now, "end": now + dt.timedelta(minutes=minutes), "seconds": minutes * 60, "evaluation": "创造", "kind": kind,
+                "device": device, "context": "", "domain": "工作", "subdomain": "开发", "project": "x", "app": "A"}
+    rows = [r("Mac", "Mac", 30), r("Wissen's iPhone", "iPhone", 20), r("Work iPhone", "iPhone", 10)]
+    monkeypatch.setattr(I, "fetch_intervals", lambda *a, **k: rows)
+    combined = server.build({"range": "7d"})
+    assert list(combined["by_device"]) == ["Mac", "iPhone"] and not combined["split"]
+    detailed = server.build({"range": "7d", "split": "1"})
+    assert list(detailed["by_device"]) == ["Mac", "iPhone:Wissen's iPhone", "iPhone:Work iPhone"]  # a lone Mac stays "Mac"
+    assert sum(detailed["by_device"]["iPhone:Work iPhone"].values()) == pytest.approx(600)
+    cal = server.build_calendar({"split": "1"})
+    assert cal["lanes"] == ["Mac", "iPhone:Wissen's iPhone", "iPhone:Work iPhone"]

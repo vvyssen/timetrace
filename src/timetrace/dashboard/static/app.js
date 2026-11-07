@@ -18,6 +18,7 @@ function applyStatic() {
   document.getElementById("ranges").setAttribute("aria-label", t("range"));
   document.getElementById("date").setAttribute("aria-label", t("pickDay"));
   document.getElementById("device").setAttribute("aria-label", t("device"));
+  document.getElementById("split").setAttribute("aria-label", t("splitLabel"));
   const slot = document.getElementById("slot");
   slot.setAttribute("aria-label", t("slot"));
   [...slot.options].forEach(o => { o.textContent = o.value === "60" ? t("slot60") : t("slotN", { n: o.value }); });
@@ -32,9 +33,8 @@ function deviceOptions() {
   if (!META) return;
   const devs = META.devices || [], count = {};
   devs.forEach(d => { count[d.kind] = (count[d.kind] || 0) + 1; });
-  const [l, r] = LANG === "zh" ? ["（", "）"] : [" (", ")"];
   const opts = [["all", t("allDevices")], ...devs.map(d => count[d.kind] > 1
-    ? ["name:" + d.name, `${d.kind}${l}${d.name.replace(/\.local$/, "")}${r}`] : [d.kind.toLowerCase(), d.kind])];
+    ? ["name:" + d.name, laneLabel(`${d.kind}:${d.name}`)] : [d.kind.toLowerCase(), d.kind])];
   const key = JSON.stringify(opts);
   if (sel.dataset.key !== key) {
     sel.replaceChildren(...opts.map(([v, txt]) => el("option", { value: v, text: txt })));
@@ -52,6 +52,18 @@ function setMeta(m) {
 }
 
 // ---------- helpers ----------
+// Device lanes: "iPhone" (combined view, or the only one of its kind) or "iPhone:name" (detailed view)
+const KINDS = ["Mac", "iPhone", "iPad"];
+const laneRank = (a, b) => (KINDS.indexOf(a.split(":")[0]) - KINDS.indexOf(b.split(":")[0])) || a.localeCompare(b);
+function laneLabel(k, short = false) {
+  const i = k.indexOf(":");
+  if (i < 0) return k;
+  const name = k.slice(i + 1).replace(/\.local$/, "");
+  if (short) return name;
+  const [l, r] = LANG === "zh" ? ["（", "）"] : [" (", ")"];
+  return `${k.slice(0, i)}${l}${name}${r}`;
+}
+const multiDevice = () => { const c = {}; ((META && META.devices) || []).forEach(d => { c[d.kind] = (c[d.kind] || 0) + 1; }); return Object.values(c).some(n => n > 1); };
 const col = e => `var(--e-${ROLE[e] && ROLE_ORDER.includes(ROLE[e]) ? ROLE[e] : "none"})`;
 const onCol = e => `var(--on-${ROLE[e] && ROLE_ORDER.includes(ROLE[e]) ? ROLE[e] : "none"})`;
 const el = (tag, attrs = {}, ...kids) => {
@@ -65,6 +77,12 @@ const el = (tag, attrs = {}, ...kids) => {
   return n;
 };
 const NS = "http://www.w3.org/2000/svg";
+let measureCtx = null;  // width of a chart label in px, so label columns fit their text instead of a fixed guess
+function textWidth(text, px = 11) {
+  measureCtx = measureCtx || document.createElement("canvas").getContext("2d");
+  measureCtx.font = `${px}px ${getComputedStyle(document.body).fontFamily}`;
+  return measureCtx.measureText(text).width;
+}
 const sv = (tag, attrs = {}) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
 const sum = o => EVALS.reduce((a, e) => a + (o[e] || 0), 0);
 function fmt(sec) {
@@ -210,15 +228,15 @@ function renderSummary() {
   META.evaluations.slice(0, 4).forEach(({ name, desc }) => legend.append(el("div", { class: "item" },
     el("span", { class: "sw", style: `background:${col(name)}` }), el("span", { text: name }), el("span", { class: "desc", text: (desc || "").split(/——| — /)[0] }))));
   c.append(legend);
-  const devs = Object.keys(data.by_device).sort((a, b) => ["Mac", "iPhone", "iPad"].indexOf(a) - ["Mac", "iPhone", "iPad"].indexOf(b));
+  const devs = Object.keys(data.by_device).sort(laneRank);
   if (data.device === "all" && devs.length > 1) {
     const rows = el("div", { class: "devrows" });
     const devMax = Math.max(...devs.map(d => sum(data.by_device[d])));
     devs.forEach(d => {
       const o = data.by_device[d], tt = sum(o);
       const thin = el("div", { class: "thin", style: `width:${Math.max(1, tt / devMax * 100)}%` });
-      EVALS.forEach(e => { if (o[e] > 0) { const p = el("div", { style: `flex:${o[e]} 1 0;background:${col(e)}` }); thin.append(p); hover(p, ev => showTip(ev, `${d} · ${e}`, [[pct(o[e], tt), fmt(o[e]), col(e)]])); } });
-      rows.append(el("div", { text: d }), thin, el("div", { class: "num", text: fmt(tt) }));
+      EVALS.forEach(e => { if (o[e] > 0) { const p = el("div", { style: `flex:${o[e]} 1 0;background:${col(e)}` }); thin.append(p); hover(p, ev => showTip(ev, `${laneLabel(d)} · ${e}`, [[pct(o[e], tt), fmt(o[e]), col(e)]])); } });
+      rows.append(el("div", { class: "lbl", text: laneLabel(d), title: laneLabel(d) }), thin, el("div", { class: "num", text: fmt(tt) }));
     });
     c.append(rows);
   }
@@ -324,9 +342,11 @@ function renderHeat() {
   // grid
   const box = el("div"); c.append(box);
   const W = box.clientWidth || c.clientWidth - 36 || 800, narrow = W < 520;
-  const padL = narrow ? 64 : 88, padT = 16, gap = 2, cw = (W - padL) / 24, ch = Math.max(18, Math.min(30, cw * 0.95));
+  const padL = Math.ceil(Math.max(...rows.map(r => textWidth(r.label)))) + (narrow ? 6 : 10);
+  const padT = 16, gap = 2, cw = (W - padL) / 24, ch = narrow ? Math.max(15, cw * 1.25) : Math.max(18, Math.min(30, cw * 0.95));
   const max = Math.max(...rows.flatMap(r => r.h.map(cellVal)), 1);
-  const color = sel ? col(sel) : "var(--ink-2)";
+  const top = hr => { let bi = -1, bv = 0; hr.forEach((v, k) => { if (v > bv) { bv = v; bi = k; } }); return bi < 0 ? null : H.evals[bi]; };
+  const fillOf = hr => sel ? col(sel) : col(top(hr));  // "all": the evaluation with the most time that hour
   const svg = sv("svg", { width: W, height: padT + rows.length * ch, role: "img", "aria-label": `${title}. ${c.querySelector(".heat-sum").textContent}` });
   for (let h = 0; h < 24; h += narrow ? 6 : 3) { const lab = sv("text", { x: padL + h * cw + 1, y: 10 }); lab.textContent = String(h).padStart(2, "0"); svg.append(lab); }
   rows.forEach((r, i) => {
@@ -335,16 +355,22 @@ function renderHeat() {
     r.h.forEach((hr, h) => {
       const v = cellVal(hr), x = padL + h * cw, g = sv("g", { class: "heat-cell" });
       g.append(sv("rect", { x: x + gap / 2, y: y + gap / 2, width: cw - gap, height: ch - gap, rx: 3, fill: "var(--wash)" }));
-      if (v > 0) g.append(sv("rect", { x: x + gap / 2, y: y + gap / 2, width: cw - gap, height: ch - gap, rx: 3, fill: color, "fill-opacity": HEAT_OPACITY(v / max).toFixed(3) }));
+      if (v > 0) g.append(sv("rect", { x: x + gap / 2, y: y + gap / 2, width: cw - gap, height: ch - gap, rx: 3, fill: fillOf(hr), "fill-opacity": HEAT_OPACITY(v / max).toFixed(3) }));
       const when = `${r.title} · ${clock(h)}–${clock(h + 1)}${byWd ? t("heatAvg") : ""}`;
       hover(g, ev => showTip(ev, when, sel ? [[sel, fmt(v), col(sel)]] : evalRows(Object.fromEntries(H.evals.map((e, k) => [e, hr[k]])), v)));
       svg.append(g);
     });
   });
   box.append(svg);
-  const ramp = el("div", { class: "ramp" }, t("heatLess"));
-  [0, 0.25, 0.5, 0.75, 1].forEach(f => ramp.append(el("i", { style: `background:${color};opacity:${HEAT_OPACITY(f).toFixed(3)}` })));
-  ramp.append(t("heatMore"), " · ", t("heatMax", { v: fmt(max) }));
+  const ramp = el("div", { class: "ramp" });
+  if (sel) {
+    ramp.append(t("heatLess"));
+    [0, 0.25, 0.5, 0.75, 1].forEach(f => ramp.append(el("i", { style: `background:${col(sel)};opacity:${HEAT_OPACITY(f).toFixed(3)}` })));
+    ramp.append(t("heatMore"), " · ", t("heatMax", { v: fmt(max) }));
+  } else {
+    ramp.append(el("span", { text: t("heatAllLegend", { v: fmt(max) }) }));
+    evs.forEach(e => ramp.append(el("span", { class: "item" }, el("i", { style: `background:${col(e)};width:10px` }), e)));
+  }
   c.append(ramp);
 }
 
@@ -384,7 +410,7 @@ function renderProjects() {
   if (!data.projects.length) { c.append(el("div", { class: "empty", text: t("noData") })); return; }
   const bars = el("div", { class: "bars wide" });
   const max = Math.max(...data.projects.map(p => sum(p.evals)));
-  data.projects.forEach(p => barRow(bars, p.project, `${[p.domain, p.subdomain].filter(Boolean).join("/")} · ${p.devices.join("+")}`, p.evals, max, { tipTitle: p.project }));
+  data.projects.forEach(p => barRow(bars, p.project, `${[p.domain, p.subdomain].filter(Boolean).join("/")} · ${p.devices.map(d => laneLabel(d, true)).join("+")}`, p.evals, max, { tipTitle: p.project }));
   c.append(bars);
 }
 
@@ -393,8 +419,9 @@ function renderTimeline() {
   if (data.range.days > 1 || !data.timeline.length) { c.hidden = true; return; }
   card("c-timeline", t("timeline"), t("timelineNote"));
   const box = el("div"); c.append(box);
-  const W = box.clientWidth || c.clientWidth - 36 || 900, padL = 56, laneH = 22, gap = 14;
-  const lanes = ["Mac", "iPhone", "iPad"].filter(d => data.timeline.some(s => s.device === d));
+  const lanes = [...new Set(data.timeline.map(s => s.device))].sort(laneRank);
+  const labels = Object.fromEntries(lanes.map(d => { const s = laneLabel(d, true); return [d, s.length > 18 ? s.slice(0, 17) + "…" : s]; }));
+  const W = box.clientWidth || c.clientWidth - 36 || 900, padL = Math.max(56, Math.min(150, 12 + Math.ceil(Math.max(...lanes.map(d => textWidth(labels[d], 12)))))), laneH = 22, gap = 14;
   const H = lanes.length * (laneH + gap) + 18;
   const day0 = new Date(data.range.start).getTime();
   const x = v => padL + (v - day0) / 86400000 * (W - padL - 4);
@@ -406,13 +433,13 @@ function renderTimeline() {
   }
   lanes.forEach((d, i) => {
     const y0 = i * (laneH + gap);
-    const lab = sv("text", { x: 0, y: y0 + laneH / 2 + 4 }); lab.textContent = d; lab.style.fill = "var(--ink-2)"; lab.style.fontSize = "12px"; svg.append(lab);
+    const lab = sv("text", { x: 0, y: y0 + laneH / 2 + 4 }); lab.textContent = labels[d]; lab.style.fill = "var(--ink-2)"; lab.style.fontSize = "12px"; svg.append(lab);
     svg.append(sv("rect", { x: padL, y: y0, width: W - padL - 4, height: laneH, fill: "var(--wash)", rx: 4 }));
     data.timeline.filter(s => s.device === d).forEach(s => {
       const a = new Date(s.start).getTime(), b = new Date(s.end).getTime();
       const xa = x(a), w = Math.max(1.5, x(b) - xa);
       const r = sv("rect", { x: xa, y: y0, width: w, height: laneH, fill: col(s.evaluation), rx: w > 6 ? 2 : 0 });
-      hover(r, ev => showTip(ev, `${hm(a)}–${hm(b)} · ${fmt((b - a) / 1000)}`, [[s.evaluation, s.app, col(s.evaluation)]],
+      hover(r, ev => showTip(ev, `${hm(a)}–${hm(b)} · ${fmt((b - a) / 1000)}${lanes.length > 1 ? " · " + laneLabel(d) : ""}`, [[s.evaluation, s.app, col(s.evaluation)]],
         `${[s.domain, s.subdomain, s.project].filter(Boolean).join(" / ")}${s.rule ? "  · " + s.rule : ""}`));
       svg.append(r);
     });
@@ -427,7 +454,7 @@ function renderTable() {
   tbl.append(el("thead", {}, el("tr", {}, el("th", { text: t("colDevice") }), el("th", { text: t("colApp") }), el("th", { text: t("colDomain") }), el("th", { text: t("colProject") }),
     ...EVALS.slice(0, 4).map(e => el("th", { class: "n", text: e })), el("th", { class: "n", text: t("colTotal") }))));
   const tb = el("tbody");
-  data.apps.forEach(a => tb.append(el("tr", {}, el("td", { text: a.device }), el("td", { text: a.app }), el("td", { text: a.domain }), el("td", { text: a.project }),
+  data.apps.forEach(a => tb.append(el("tr", {}, el("td", { text: laneLabel(a.device) }), el("td", { text: a.app }), el("td", { text: a.domain }), el("td", { text: a.project }),
     ...EVALS.slice(0, 4).map(e => el("td", { class: "n", text: a.evals[e] > 0 ? fmt(a.evals[e]) : "" })), el("td", { class: "n", text: fmt(sum(a.evals)) }))));
   tbl.append(tb); det.append(el("div", { class: "tablewrap" }, tbl)); c.append(det);
 }
@@ -495,7 +522,7 @@ function renderCalendar() {
     const h = el("div", { class: "cal-dh" + (d.date === today ? " today" : ""), role: "button", tabindex: "0", title: t("calDayTip") },
       el("div", { class: "wd" }, el("b", { text: d.weekday }), " " + d.date.slice(5).replace("-", "/")),
       el("div", { class: "tot", text: d.total > 0 ? fmt(d.total) : "—" }), thin,
-      devs.length > 1 ? el("div", { class: "lanes-lbl", style: `grid-template-columns:repeat(${devs.length},1fr)` }, ...devs.map(v => el("span", { text: v }))) : null);
+      devs.length > 1 ? el("div", { class: "lanes-lbl", style: `grid-template-columns:repeat(${devs.length},minmax(0,1fr))` }, ...devs.map(v => el("span", { text: laneLabel(v, true), title: laneLabel(v) }))) : null);
     const go = () => { state.view = "overview"; setDay(d.date); };
     h.addEventListener("click", go);
     h.addEventListener("keydown", e => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), go()));
@@ -524,7 +551,7 @@ function renderCalendar() {
     if (h >= 30) blk.append(el("div", { class: "s", text: fmt((e - s) / 1000) }));
     const others = b.top_projects.length > 1 ? t("calProjects", { v: b.top_projects.map(([n, v]) => `${n} ${fmt(v)}`).join(sep) }) : "";
     const apps = t("calApps", { v: b.top_apps.map(([n, v]) => `${n} ${fmt(v)}`).join(sep) });
-    hover(blk, ev => showTip(ev, `${hm(s)}–${hm(e)} · ${b.device} · ${b.project} (${t("calActual", { v: fmt(b.seconds) })})`, evalRows(b.evals, b.seconds),
+    hover(blk, ev => showTip(ev, `${hm(s)}–${hm(e)} · ${laneLabel(b.device)} · ${b.project} (${t("calActual", { v: fmt(b.seconds) })})`, evalRows(b.evals, b.seconds),
       [[b.domain, b.subdomain].filter(Boolean).join(" / "), others, apps].filter(Boolean).join("\n")));
     dc.laneEls[b.device].append(blk);
   });
@@ -749,7 +776,7 @@ function stepDone(body, navBtns) {
 }
 
 // ---------- state & loading ----------
-const state = { view: "overview", range: "today", date: null, device: "all", slot: "15", calDate: null, heat: "all" };
+const state = { view: "overview", range: "today", date: null, device: "all", slot: "15", calDate: null, heat: "all", split: false };
 let lastQuery = "";
 function saveState() {
   try { localStorage.setItem("tt-dash", JSON.stringify(state)); } catch (e) {}
@@ -767,6 +794,9 @@ function syncControls() {
   document.getElementById("slot").hidden = !calv;
   document.getElementById("slot").value = state.slot;
   deviceOptions();
+  const split = document.getElementById("split");  // combined | detailed: only matters with several devices of one kind
+  split.hidden = !multiDevice() || state.device.startsWith("name:");
+  split.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String((b.dataset.s === "1") === !!state.split)));
   document.getElementById("prev").setAttribute("aria-label", t(calv ? "prevWeek" : "prevDay"));
   document.getElementById("next").setAttribute("aria-label", t(calv ? "nextWeek" : "nextDay"));
   if (calv) {
@@ -799,6 +829,7 @@ async function load() {
   let q, live;
   if (state.view === "calendar") {
     q = new URLSearchParams({ view: "calendar", device: state.device, slot: state.slot });
+    if (state.split && multiDevice()) q.set("split", "1");
     if (state.calDate) q.set("date", state.calDate);
     try { cal = await api("/api/calendar?" + q); setMeta(cal.meta); } catch (e) { cal = { error: e.message }; }
     document.getElementById("app").classList.remove("loading");
@@ -806,6 +837,7 @@ async function load() {
     live = !cal.error && new Date(cal.week.end).getTime() > Date.now();
   } else {
     q = new URLSearchParams({ range: state.range, device: state.device });
+    if (state.split && multiDevice()) q.set("split", "1");
     if (state.range === "day") q.set("date", state.date);
     try { data = await api("/api/data?" + q); setMeta(data.meta); } catch (e) { data = { error: e.message }; }
     document.getElementById("app").classList.remove("loading");
@@ -838,6 +870,7 @@ document.getElementById("date").addEventListener("change", e => {
   if (state.view === "calendar") { state.calDate = e.target.value; load(); } else setDay(e.target.value);
 });
 document.getElementById("device").addEventListener("change", e => { state.device = e.target.value; load(); });
+document.querySelectorAll("#split button").forEach(b => b.addEventListener("click", () => { state.split = b.dataset.s === "1"; load(); }));
 const shift = n => {
   if (state.view === "calendar") { const x = addDays(state.calDate || localDate(new Date()), 7 * n); state.calDate = x >= localDate(new Date()) ? null : x; load(); return; }
   setDay(addDays(document.getElementById("date").value || localDate(new Date()), n));
@@ -872,6 +905,7 @@ let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTime
   else if (hp.get("range")) { state.view = "overview"; state.range = hp.get("range"); state.date = hp.get("date"); }
   if (hp.get("device")) state.device = hp.get("device");
   if (hp.get("heat")) state.heat = hp.get("heat");
+  if (hp.has("range") || hp.has("view")) state.split = hp.get("split") === "1";
   if (state.range === "day" && !state.date) state.range = "today";
   load();
 })();

@@ -75,7 +75,8 @@ h1 { font-size: 20px; font-weight: 600; margin: 0; }
 .segbar div { border-radius: 4px; min-width: 0; display: flex; align-items: center; padding-left: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: visible; }
 .thin { display: flex; gap: 2px; height: 8px; }
 .thin div { border-radius: 4px; }
-.devrows { display: grid; grid-template-columns: 70px 1fr 90px; gap: 8px 12px; align-items: center; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.devrows { display: grid; grid-template-columns: minmax(56px, max-content) 1fr 90px; gap: 8px 12px; align-items: center; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.devrows .lbl { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .devrows .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 4px; }
 .legend .item { display: flex; gap: 6px; align-items: baseline; font-size: 12.5px; color: var(--ink); }
@@ -122,7 +123,8 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 .cal-dh .wd b { color: var(--ink); font-weight: 600; }
 .cal-dh.today .wd b { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
 .cal-dh .tot { font-size: 12px; color: var(--muted); margin: 1px 0 5px; font-variant-numeric: tabular-nums; }
-.cal-dh .lanes-lbl { display: grid; font-size: 10.5px; color: var(--muted); margin-top: 5px; text-align: center; }
+.cal-dh .lanes-lbl { display: grid; gap: 2px; font-size: 10.5px; color: var(--muted); margin-top: 5px; text-align: center; }
+.cal-dh .lanes-lbl span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-body { position: relative; }
 .cal-gutter { position: relative; }
 .cal-gutter span { position: absolute; right: 8px; transform: translateY(-50%); font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -208,6 +210,8 @@ pre.prompt { white-space: pre-wrap; font-size: 12.5px; max-height: 260px; overfl
 .seg .sw { margin-right: 5px; transform: translateY(1px); }
 .ramp { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--muted); }
 .ramp i { width: 18px; height: 10px; border-radius: 3px; display: inline-block; }
+.ramp { flex-wrap: wrap; }
+.ramp .item { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); margin-right: 8px; }
 .heat-cell { cursor: default; }
 /* phone access */
 .phone-state { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 14px; }
@@ -247,7 +251,8 @@ ul.tips li { margin: 4px 0; }
   .tile .v { font-size: 20px; white-space: nowrap; }
   .bars, .bars.wide { grid-template-columns: minmax(64px, 34%) 1fr 54px; gap: 8px 8px; }
   .bars .name small { display: block; margin-left: 0; overflow: hidden; text-overflow: ellipsis; }
-  .devrows { grid-template-columns: 52px 1fr 64px; }
+  .devrows { grid-template-columns: minmax(48px, max-content) 1fr 64px; }
+  .devrows .lbl { max-width: 120px; }
   .cal { max-height: calc(100vh - 230px); }
   #tip { max-width: calc(100vw - 16px); }
 }
@@ -280,6 +285,7 @@ ul.tips li { margin: 4px 0; }
     <input class="ctl" type="date" id="date">
     <button class="ctl icon" id="next">›</button>
     <select class="ctl" id="device"><option value="all" data-t="allDevices"></option></select>
+    <div class="seg" id="split" role="group" hidden><button data-s="0" data-t="splitMerged"></button><button data-s="1" data-t="splitDetailed"></button></div>
     <select class="ctl" id="slot" hidden><option value="5"></option><option value="15"></option><option value="30"></option><option value="60"></option></select>
     <span class="spacer"></span>
     <span class="sub" id="updated"></span>
