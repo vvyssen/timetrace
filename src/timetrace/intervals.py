@@ -18,6 +18,8 @@ def device_match(source, name, filt):
     if not filt or filt == "all":
         return True
     f = filt.lower()
+    if f.startswith("name:"):  # one specific device, exact name (from the dashboard's device menu)
+        return (name or "").lower() == f[5:]
     if f in ("mac", "macbook"):
         return source == "mac"
     if f in ("ios", "mobile"):
@@ -27,6 +29,21 @@ def device_match(source, name, filt):
     if f == "ipad":
         return source == "ios" and device_kind(source, name) == "iPad"
     return f in (name or "").lower()
+
+
+def devices():
+    """Devices ActivityWatch has data buckets for: [{name, kind, source}], Macs, then iPhones, then iPads.
+    Mac names follow fetch_intervals: plain "Mac" unless there is more than one."""
+    from . import demo
+    if demo.ON:
+        return demo.devices()
+    buckets = aw.buckets().values()
+    hosts = sorted({b.get("hostname") or "Mac" for b in buckets if b.get("type") == "currentwindow"})
+    out = [{"name": h if len(hosts) > 1 else "Mac", "kind": "Mac", "source": "mac"} for h in hosts]
+    ios = sorted({b.get("hostname") or "iPhone" for b in buckets if b.get("client") == SCREENTIME_CLIENT})
+    out += [{"name": n, "kind": device_kind("ios", n), "source": "ios"} for n in ios]
+    rank = {"Mac": 0, "iPhone": 1, "iPad": 2}
+    return sorted(out, key=lambda d: (rank[d["kind"]], d["name"].lower()))
 
 
 def _utc(t):

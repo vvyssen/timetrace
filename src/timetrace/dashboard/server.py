@@ -33,6 +33,13 @@ def evals_dict(order):
     return {e: 0.0 for e in order}
 
 
+def known_devices():
+    try:
+        return I.devices()
+    except Exception:  # ActivityWatch down: the data routes will say so
+        return []
+
+
 def meta():
     cfg = config.get()
     s = settings.load()
@@ -42,6 +49,7 @@ def meta():
         "evaluations": [{"name": e, "role": cfg["evaluation_roles"].get(e, "none"), "desc": cfg["evaluations"].get(e, "")} for e in order],
         "uncategorized": cfg["uncategorized"], "domains": cfg["domains"],
         "duration_rules": cfg.get("duration_rules") or {},
+        "devices": known_devices(),
     }
 
 

@@ -236,3 +236,22 @@ def test_heat_cells_add_up_to_the_daily_totals(srv, monkeypatch):
         daily = next(x for x in d["daily"] if x["date"] == day["date"])
         assert sum(map(sum, day["h"])) == pytest.approx(sum(daily["evals"].values()), abs=2)
     assert server.build({"range": "today"})["heat"] is None
+
+
+def test_devices_come_from_activitywatch_buckets(srv, monkeypatch):
+    I = srv["I"]
+    import timetrace.aw as aw
+    monkeypatch.setattr(aw, "buckets", lambda: {
+        "w": {"type": "currentwindow", "hostname": "Yans-MacBook-Air.local"},
+        "a": {"type": "afkstatus", "hostname": "Yans-MacBook-Air.local"},
+        "p1": {"client": "aw-import-screentime", "hostname": "Wissen's iPhone"},
+        "p2": {"client": "aw-import-screentime", "hostname": "Work iPhone"},
+        "s": {"type": "general.stopwatch", "hostname": "unknown"}})
+    assert I.devices() == [{"name": "Mac", "kind": "Mac", "source": "mac"},
+                           {"name": "Wissen's iPhone", "kind": "iPhone", "source": "ios"},
+                           {"name": "Work iPhone", "kind": "iPhone", "source": "ios"}]  # no iPad
+    assert srv["server"].meta()["devices"][1]["name"] == "Wissen's iPhone"
+    # the menu filters one device by exact name; a plain word still matches part of a name
+    assert I.device_match("ios", "Work iPhone", "name:work iphone")
+    assert not I.device_match("ios", "Work iPhone 2", "name:work iphone")
+    assert I.device_match("ios", "Work iPhone 2", "work iphone")

@@ -86,6 +86,11 @@ def intervals(start, end, device, cfg):
     return out
 
 
+def devices():
+    return [{"name": "Mac", "kind": "Mac", "source": "mac"}, {"name": "Demo iPhone", "kind": "iPhone", "source": "ios"},
+            {"name": "Demo iPad", "kind": "iPad", "source": "ios"}]
+
+
 def status():
     now = dt.datetime.now(dt.timezone.utc).isoformat()
     return {"aw": {"ok": True, "url": "demo", "version": "demo"}, "mac": {"ok": True, "last": now, "fresh": True, "title_ratio": 0.97, "afk": True},

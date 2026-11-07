@@ -17,7 +17,7 @@ RANGE = {
     "to": {"type": "string", "description": "end: a bare date means through 23:59:59 that day"},
     "since": {"type": "string", "description": "relative start: 7d / 24h / 90m / 2w; all empty = last 7 days"},
 }
-DEVICE = {"type": "string", "description": "all, mac, iphone, ipad, or part of a device name", "default": "all"}
+DEVICE = {"type": "string", "description": "all, mac, iphone, ipad, part of a device name, or name:<exact device name>", "default": "all"}
 TAG_PROPS = {
     "id": {"type": "string", "description": "id of an item from `suggest`; fills in kind, key and app scope"},
     "kind": {"type": "string", "enum": ["ios_app", "mac_app", "mac_context"]},

@@ -23,13 +23,32 @@ function applyStatic() {
   [...slot.options].forEach(o => { o.textContent = o.value === "60" ? t("slot60") : t("slotN", { n: o.value }); });
   document.querySelectorAll("#langs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.l === LANG)));
   if (window.TT_READONLY) document.querySelector("header .sub").textContent = t("roSub");
+  deviceOptions();
+}
+// Device menu from the devices ActivityWatch actually has: one device of a kind shows just the kind
+// ("iPhone"); several of a kind show each by name ("iPhone（Work phone）") and filter by exact name.
+function deviceOptions() {
+  const sel = document.getElementById("device");
+  if (!META) return;
+  const devs = META.devices || [], count = {};
+  devs.forEach(d => { count[d.kind] = (count[d.kind] || 0) + 1; });
+  const [l, r] = LANG === "zh" ? ["（", "）"] : [" (", ")"];
+  const opts = [["all", t("allDevices")], ...devs.map(d => count[d.kind] > 1
+    ? ["name:" + d.name, `${d.kind}${l}${d.name.replace(/\.local$/, "")}${r}`] : [d.kind.toLowerCase(), d.kind])];
+  const key = JSON.stringify(opts);
+  if (sel.dataset.key !== key) {
+    sel.replaceChildren(...opts.map(([v, txt]) => el("option", { value: v, text: txt })));
+    sel.dataset.key = key;
+  }
+  if (!opts.some(([v]) => v === state.device)) state.device = "all";  // e.g. a saved "ipad" on a Mac with no iPad
+  sel.value = state.device;
 }
 function setMeta(m) {
   if (!m) return;
   META = m;
   EVALS = m.evaluations.map(e => e.name);
   ROLE = Object.fromEntries(m.evaluations.map(e => [e.name, e.role]));
-  if (LANG !== m.lang) { LANG = m.lang; applyStatic(); }
+  if (LANG !== m.lang) { LANG = m.lang; applyStatic(); } else deviceOptions();
 }
 
 // ---------- helpers ----------
@@ -159,7 +178,7 @@ const OVERVIEW_CARDS = ["c-summary", "c-timeline", "c-daily", "c-heat", "c-hourl
 const hideCards = ids => ids.forEach(id => { document.getElementById(id).hidden = true; });
 
 // ---------- overview ----------
-function deviceLabel() { return data.device === "all" ? t("allDevicesShort") : t("onlyDevice", { d: { mac: "Mac", iphone: "iPhone", ipad: "iPad" }[data.device] || data.device }); }
+function deviceLabel() { return data.device === "all" ? t("allDevicesShort") : t("onlyDevice", { d: { mac: "Mac", iphone: "iPhone", ipad: "iPad" }[data.device] || data.device.replace(/^name:/, "") }); }
 
 function renderSummary() {
   const c = card("c-summary", t("period"), rangeLabel());
@@ -747,7 +766,7 @@ function syncControls() {
   document.getElementById("thisweek").hidden = !calv;
   document.getElementById("slot").hidden = !calv;
   document.getElementById("slot").value = state.slot;
-  document.getElementById("device").value = state.device;
+  deviceOptions();
   document.getElementById("prev").setAttribute("aria-label", t(calv ? "prevWeek" : "prevDay"));
   document.getElementById("next").setAttribute("aria-label", t(calv ? "nextWeek" : "nextDay"));
   if (calv) {
