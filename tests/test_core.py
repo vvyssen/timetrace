@@ -153,3 +153,15 @@ def test_keyword_tag_stays_in_its_app_family(tt):
                    "domain": "生活", "subdomain": "个人项目", "evaluation": "创造", "project": "个人项目"}])
     assert C.classify_mac("Terminal", "wissen — zsh")["project"] == "个人项目"
     assert C.classify_mac("1Password", "wissen — All Items")["rule"] == "passwords"
+
+
+def test_tag_by_suggest_id_fills_item_and_scope(tt, monkeypatch):
+    O, C = tt["O"], tt["C"]
+    fake = {"needs_tag": [{"id": "mac_context:my-repo", "kind": "mac_context", "app": "Ghostty", "keyword": "my-repo",
+                           "apps": O.DEV_APPS}], "review": []}
+    monkeypatch.setattr(O, "candidates", lambda *a, **k: fake)
+    O.apply_tags([{"id": "mac_context:my-repo", "domain": "工作", "subdomain": "开发", "evaluation": "创造", "project": "my-repo"}])
+    assert C.classify_mac("Ghostty", "my-repo — zsh")["project"] == "my-repo"
+    assert C.classify_mac("Safari", "my-repo pull request")["project"] != "my-repo"   # scoped to dev apps
+    with pytest.raises(ValueError):
+        O.apply_tags([{"id": "mac_context:nope", "domain": "工作", "evaluation": "创造"}])

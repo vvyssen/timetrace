@@ -96,11 +96,10 @@ def cmd_suggest(a):
     if a.format == "json":
         print(json.dumps(c, ensure_ascii=False, indent=2, default=str))
         return
-    rows = [{"kind": g["kind"], "item": g.get("bundle") or g.get("keyword") or g["app"], "label": g["label"],
-             "time": C.fmt_dur(g["seconds"]), "devices": "+".join(g["devices"]),
+    rows = [{"id": g["id"], "label": g["label"], "time": C.fmt_dur(g["seconds"]), "devices": "+".join(g["devices"]),
              "now": f"{g['current']['domain']}/{g['current']['subdomain'] or '-'}/{g['current']['evaluation']}"} for g in c["needs_tag"]]
-    print(f"# {len(rows)} item(s) to tag from the last {a.days} days — tag with `timetrace tag …`", file=sys.stderr)
-    emit(rows, ["kind", "item", "label", "time", "devices", "now"], "table")
+    print(f"# {len(rows)} item(s) to tag from the last {a.days} days — `timetrace tag --id <id> --domain … --evaluation …`", file=sys.stderr)
+    emit(rows, ["id", "label", "time", "devices", "now"], "table")
 
 
 def cmd_doctor(a):
@@ -134,14 +133,16 @@ def cmd_doctor(a):
 
 # ---- write --------------------------------------------------------------------------------------
 def cmd_tag(a):
-    if a.bundle:
+    if a.id:
+        t = {"id": a.id}
+    elif a.bundle:
         t = {"kind": "ios_app", "bundle": a.bundle, "app": a.app}
     elif a.mac_app:
         t = {"kind": "mac_app", "app": a.mac_app}
     elif a.keyword:
         t = {"kind": "mac_context", "keyword": a.keyword, "apps": a.apps.split(",") if a.apps else None}
     else:
-        raise ValueError("give one of --bundle, --mac-app or --keyword")
+        raise ValueError("give one of --id, --bundle, --mac-app or --keyword")
     if a.ignore:
         t["ignore"] = True
     else:
@@ -223,6 +224,9 @@ def cmd_sync_aw(a):
 
 def cmd_agent(a):
     from . import agents
+    if a.action == "prompt":
+        print(agents.prompt(a.lang or settings.load()["lang"]).rstrip())
+        return
     res = agents.install(a.only.split(",") if a.only else None) if a.action == "install" else agents.status()
     for name, r in res.items():
         if not r.get("found"):
@@ -305,6 +309,7 @@ def build_parser():
     sg.set_defaults(func=cmd_suggest)
 
     tg = sub.add_parser("tag", help="save a tag into your rules")
+    tg.add_argument("--id", help="an id from `timetrace suggest` (fills in the item and its app scope)")
     tg.add_argument("--bundle", help="iPhone/iPad bundle id")
     tg.add_argument("--mac-app", help="Mac app name")
     tg.add_argument("--keyword", help="Mac window-title keyword (e.g. a project folder)")
@@ -345,7 +350,9 @@ def build_parser():
     sa.set_defaults(func=cmd_sync_aw)
 
     ag = sub.add_parser("agent", help="connect Claude Code / Codex / opencode / Hermes")
-    ag.add_argument("action", choices=["status", "install"], nargs="?", default="status")
+    ag.add_argument("action", choices=["status", "install", "prompt"], nargs="?", default="status",
+                    help="status | install (register MCP + skill) | prompt (print the tagging prompt)")
+    ag.add_argument("--lang", choices=["zh", "en"], help="for prompt")
     ag.add_argument("--only", help="comma-separated subset, e.g. claude,codex")
     ag.set_defaults(func=cmd_agent)
 

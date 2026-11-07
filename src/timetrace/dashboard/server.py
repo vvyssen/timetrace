@@ -236,6 +236,13 @@ def cached(kind, params, fn):
     return data
 
 
+def agent_info():
+    from .. import agents
+    lang = settings.load()["lang"]
+    return {"agents": {k: {"found": v.get("found", False), "mcp": v.get("mcp", False)} for k, v in agents.status().items()},
+            "prompt": agents.prompt(lang)}
+
+
 SETTINGS_PANES = {
     "fda": "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
     "accessibility": "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
@@ -293,7 +300,9 @@ class Handler(SimpleHTTPRequestHandler):
         routes = {"/api/data": lambda: cached("data", params, build), "/api/calendar": lambda: cached("cal", params, build_calendar),
                   "/api/meta": meta, "/api/setup/status": onboarding.status,
                   "/api/setup/first-look": lambda: onboarding.first_look(int(params.get("days", 14))),
-                  "/api/setup/candidates": lambda: onboarding.candidates(int(params.get("days", 14)))}
+                  "/api/setup/candidates": lambda: onboarding.candidates(int(params.get("days", 14))),
+                  "/api/setup/pending": lambda: cached("pending", {}, lambda p: onboarding.pending()),
+                  "/api/setup/agent": agent_info}
         if u.path in routes:
             try:
                 return self._json(routes[u.path]())

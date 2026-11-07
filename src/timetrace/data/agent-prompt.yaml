@@ -1,0 +1,18 @@
+# The prompt the setup wizard, `timetrace agent prompt` and the README hand to an AI agent so it can
+# do the tagging for the user. One source; keep the two languages in step.
+zh: |
+  帮我把 timetrace 里还没分类好的时间打上标记。
+
+  1. 先运行 `timetrace taxonomy --json` 了解我的领域、子领域和四种评价（创造 / 提升 / 保值 / 消遣），再运行 `timetrace suggest --days 14 --format json` 看待标记的条目。如果你能用 timetrace 的 MCP 工具，就用 taxonomy 和 suggest 工具。
+  2. 按耗时从多到少，给每一条提出：领域 / 子领域 / 评价 / 项目名。依据是应用名、窗口示例和时长：终端、编辑器里的条目通常是我的项目目录；浏览器条目是网页或网站；手机应用看它是做什么的。
+  3. 拿不准的（尤其是一个项目算工作、学习还是个人兴趣），直接问我，不要猜，可以一次问几个。
+  4. 用一张表把建议列给我确认。我确认或修改后，再逐条写入：`timetrace tag --id <suggest 里的 id> --domain … --subdomain … --evaluation … --project …`（用 MCP 的话就用 tag 工具，并带上 id）。没得到我确认之前不要写入。
+  5. 写完再跑一次 suggest，告诉我还剩几项、大概多少时间没标。
+en: |
+  Help me tag the time in timetrace that isn't categorized well yet.
+
+  1. Run `timetrace taxonomy --json` to learn my domains, subdomains and the four evaluations (Create / Grow / Maintain / Unwind), then `timetrace suggest --days 14 --format json` to see what needs a tag. If you have timetrace's MCP tools, use the taxonomy and suggest tools instead.
+  2. Going from most to least time, propose a domain / subdomain / evaluation / project for each item, based on the app name, the example window titles and the time spent: terminal and editor items are usually my project folders, browser items are pages or sites, phone apps by what they're for.
+  3. If you're unsure — especially whether a project is work, study or a personal interest — ask me instead of guessing. Several questions at once is fine.
+  4. Show me the proposals as one table. After I confirm or correct them, write each one with `timetrace tag --id <id from suggest> --domain … --subdomain … --evaluation … --project …` (or the MCP tag tool, passing the id). Don't write anything before I confirm.
+  5. Run suggest again afterwards and tell me how many items and roughly how much time are still untagged.

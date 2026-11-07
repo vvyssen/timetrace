@@ -44,6 +44,30 @@ On first launch the dashboard walks you through: checks → a first look at your
 
 The built-in library covers ~100 common apps (Chinese and international). What it can't know — your projects — is exactly what the wizard asks about: terminal folders, editor projects, websites you spend time on, and apps it hasn't seen.
 
+### Skip the tedious part: let an agent tag for you
+
+Tagging is the only step that takes a while. Click **Skip for now** and hand it to an AI agent instead — it reads what still needs a tag, proposes tags in one table, asks you about anything ambiguous, and writes only after you confirm:
+
+```bash
+timetrace agent install                  # once: connect Claude Code / Codex / opencode
+claude "$(timetrace agent prompt)"       # or: codex "$(timetrace agent prompt)"
+```
+
+For other agents (opencode, Hermes, …) run `timetrace agent prompt` and paste the text. The dashboard keeps a small reminder while items are untagged.
+
+<details><summary>The prompt</summary>
+
+```text
+Help me tag the time in timetrace that isn't categorized well yet.
+
+1. Run `timetrace taxonomy --json` to learn my domains, subdomains and the four evaluations (Create / Grow / Maintain / Unwind), then `timetrace suggest --days 14 --format json` to see what needs a tag. If you have timetrace's MCP tools, use the taxonomy and suggest tools instead.
+2. Going from most to least time, propose a domain / subdomain / evaluation / project for each item, based on the app name, the example window titles and the time spent: terminal and editor items are usually my project folders, browser items are pages or sites, phone apps by what they're for.
+3. If you're unsure — especially whether a project is work, study or a personal interest — ask me instead of guessing. Several questions at once is fine.
+4. Show me the proposals as one table. After I confirm or correct them, write each one with `timetrace tag --id <id from suggest> --domain … --subdomain … --evaluation … --project …` (or the MCP tag tool, passing the id). Don't write anything before I confirm.
+5. Run suggest again afterwards and tell me how many items and roughly how much time are still untagged.
+```
+</details>
+
 ## Dashboard
 
 Open it from Spotlight (**Timetrace**, or **时间看板** in Chinese) or with `timetrace dash`.

@@ -13,10 +13,25 @@ from pathlib import Path
 from . import paths
 
 GUIDE = paths.DATA / "agent-guide.md"
+PROMPTS = paths.DATA / "agent-prompt.yaml"
+
+
+def prompt(lang="zh"):
+    """The tagging prompt shown by the setup wizard and `timetrace agent prompt`."""
+    import yaml
+    data = yaml.safe_load(PROMPTS.read_text(encoding="utf-8"))
+    return data.get(lang) or data["en"]
+
+
+def _which(name):
+    """shutil.which that also looks where CLIs usually live — launchd services get a minimal PATH."""
+    import os
+    extra = [str(paths.HOME / ".local" / "bin"), "/opt/homebrew/bin", "/usr/local/bin", str(paths.HOME / ".npm-global" / "bin")]
+    return shutil.which(name, path=os.pathsep.join([os.environ.get("PATH", "")] + extra))
 
 
 def mcp_command():
-    found = shutil.which("timetrace-mcp")
+    found = _which("timetrace-mcp")
     return found or str(paths.HOME / ".local" / "bin" / "timetrace-mcp")
 
 
@@ -33,14 +48,15 @@ def _skill(dirpath):
 
 
 def claude(apply):
-    if not shutil.which("claude"):
+    if not _which("claude"):
         return {"found": False}
-    r = subprocess.run(["claude", "mcp", "get", "timetrace"], capture_output=True, text=True)
+    claude_bin = _which("claude")
+    r = subprocess.run([claude_bin, "mcp", "get", "timetrace"], capture_output=True, text=True)
     has = r.returncode == 0
     res = {"found": True, "mcp": has}
     if apply:
         if not has:
-            r = subprocess.run(["claude", "mcp", "add", "--scope", "user", "timetrace", "--", mcp_command()], capture_output=True, text=True)
+            r = subprocess.run([claude_bin, "mcp", "add", "--scope", "user", "timetrace", "--", mcp_command()], capture_output=True, text=True)
             res["mcp"] = r.returncode == 0
             res["mcp_msg"] = (r.stderr or r.stdout).strip()[-200:]
         res["skill"] = _skill(paths.HOME / ".claude" / "skills")
@@ -49,7 +65,7 @@ def claude(apply):
 
 def codex(apply):
     cfg = paths.HOME / ".codex" / "config.toml"
-    if not (shutil.which("codex") or cfg.exists()):
+    if not (_which("codex") or cfg.exists()):
         return {"found": False}
     text = cfg.read_text() if cfg.exists() else ""
     has = "[mcp_servers.timetrace]" in text
@@ -67,7 +83,7 @@ def codex(apply):
 
 def opencode(apply):
     cfg = paths.HOME / ".config" / "opencode" / "opencode.json"
-    if not (shutil.which("opencode") or cfg.exists()):
+    if not (_which("opencode") or cfg.exists()):
         return {"found": False}
     try:
         data = json.loads(cfg.read_text()) if cfg.exists() else {}

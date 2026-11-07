@@ -19,6 +19,7 @@ RANGE = {
 }
 DEVICE = {"type": "string", "description": "all, mac, iphone, ipad, or part of a device name", "default": "all"}
 TAG_PROPS = {
+    "id": {"type": "string", "description": "id of an item from `suggest`; fills in kind, key and app scope"},
     "kind": {"type": "string", "enum": ["ios_app", "mac_app", "mac_context"]},
     "bundle": {"type": "string", "description": "iPhone/iPad bundle id (kind=ios_app)"},
     "app": {"type": "string", "description": "app name (kind=mac_app, or display name for ios_app)"},
@@ -38,8 +39,8 @@ TOOLS = [
     {"name": "taxonomy", "description": "The user's domains, subdomains, evaluation labels (with roles create/grow/keep/leisure) and rules.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "suggest", "description": "Apps and window keywords that still need a tag (uncategorized or only broadly guessed), with time spent and sample titles.",
      "inputSchema": {"type": "object", "properties": {"days": {"type": "integer", "default": 14}, "limit": {"type": "integer", "default": 20}}}},
-    {"name": "tag", "description": "WRITE: save tags into the user's rules. Propose tags to the user and get confirmation before calling.",
-     "inputSchema": {"type": "object", "properties": {"tags": {"type": "array", "items": {"type": "object", "properties": TAG_PROPS, "required": ["kind"]}}}, "required": ["tags"]}},
+    {"name": "tag", "description": "WRITE: save tags into the user's rules. Prefer passing the `id` from suggest plus domain/subdomain/evaluation/project. Propose tags to the user and get confirmation before calling.",
+     "inputSchema": {"type": "object", "properties": {"tags": {"type": "array", "items": {"type": "object", "properties": TAG_PROPS}}}, "required": ["tags"]}},
     {"name": "doctor", "description": "Is data flowing? ActivityWatch, Mac windows, iPhone/iPad importer and its Full Disk Access, background services.", "inputSchema": {"type": "object", "properties": {}}},
 ]
 

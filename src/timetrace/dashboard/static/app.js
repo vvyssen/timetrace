@@ -95,6 +95,62 @@ function card(id, title, note) {
   if (note !== null) c.append(el("p", { class: "note", text: note || "" }));
   return c;
 }
+
+// ---------- agent hand-off (tagging) ----------
+const AGENT_CMD = 'claude "$(timetrace agent prompt)"';
+let AGENT = null;
+async function agentInfo() { if (!AGENT) AGENT = await api("/api/setup/agent"); return AGENT; }
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {  // clipboard API unavailable: fall back to a selected textarea
+    const ta = el("textarea", { style: "position:fixed;opacity:0" }); ta.value = text; document.body.append(ta); ta.select();
+    document.execCommand("copy"); ta.remove();
+  }
+  if (btn) { const o = btn.textContent; btn.textContent = t("copied"); setTimeout(() => { btn.textContent = o; }, 1500); }
+}
+function cmdRow(text) {
+  const b = el("button", { class: "btn", type: "button" }, t("copy"));
+  b.addEventListener("click", () => copyText(text, b));
+  return el("div", { class: "cmdrow" }, el("pre", { class: "cmd", text }), b);
+}
+function agentBox(onSkip) {
+  const status = el("div", { class: "st", text: t("agentConnected") + "…" });
+  const promptPre = el("pre", { class: "cmd prompt", text: "…" });
+  const copyP = el("button", { class: "btn", type: "button" }, t("copyPrompt"));
+  agentInfo().then(a => {
+    const names = { claude: "Claude Code", codex: "Codex", opencode: "opencode", hermes: "Hermes" };
+    status.textContent = t("agentConnected") + Object.entries(a.agents).map(([k, v]) =>
+      `${names[k] || k} ${v.found ? (v.mcp ? "✓ " + t("agentOk") : "✗ " + t("agentNoMcp")) : "– " + t("agentMissing")}`).join(" · ");
+    promptPre.textContent = a.prompt;
+    copyP.onclick = () => copyText(a.prompt, copyP);
+  }).catch(e => { status.textContent = e.message; });
+  const box = el("div", { class: "agentbox" },
+    el("b", { text: t("agentTitle") }), el("div", { class: "lead", text: t("agentLead") }), status,
+    el("ol", {},
+      el("li", {}, t("agentStep1"), cmdRow("timetrace agent install")),
+      el("li", {}, t("agentStep2"), cmdRow(AGENT_CMD)),
+      el("li", {}, t("agentStep3"), " ", copyP)),
+    el("details", {}, el("summary", { text: t("agentShowPrompt") }), promptPre));
+  if (onSkip) box.append(el("div", { class: "wiz-nav", style: "margin-top:10px" }, el("button", { class: "btn primary", type: "button", onclick: onSkip }, t("skipForNow"))));
+  return box;
+}
+
+async function renderPending() {
+  const b = document.getElementById("c-pending");
+  b.hidden = true;
+  if (!META || !META.setup_done || state.view !== "overview") return;
+  try { if (sessionStorage.getItem("tt-pending-dismissed")) return; } catch (e) {}
+  let p;
+  try { p = await api("/api/setup/pending"); } catch (e) { return; }
+  if (!p.count || state.view !== "overview") return;
+  const copyB = el("button", { class: "btn", type: "button" }, t("pendingAgent"));
+  copyB.addEventListener("click", async () => copyText((await agentInfo()).prompt, copyB));
+  b.replaceChildren(el("div", { class: "msg", text: t("pendingBanner", { n: p.count, v: fmt(p.seconds) }) }),
+    el("button", { class: "btn", type: "button", onclick: () => { state.view = "setup"; wiz.step = 3; load(); } }, t("pendingTag")), copyB,
+    el("button", { class: "btn", type: "button", "aria-label": t("dismiss"), onclick: () => { try { sessionStorage.setItem("tt-pending-dismissed", "1"); } catch (e) {} b.hidden = true; } }, "×"));
+  b.hidden = false;
+}
+
 const OVERVIEW_CARDS = ["c-summary", "c-timeline", "c-daily", "c-hourly", "c-domains", "c-projects", "c-table"];
 const hideCards = ids => ids.forEach(id => { document.getElementById(id).hidden = true; });
 
@@ -294,6 +350,7 @@ function rangeLabel() {
 
 function render() {
   hideCards(["c-calendar", "c-setup"]);
+  renderPending();
   if (data.error) { hideCards(OVERVIEW_CARDS); const c = card("c-summary", t("error")); c.append(el("div", { class: "err", text: data.error })); return; }
   renderSummary(); renderTimeline(); renderDaily(); renderHourly(); renderDomains(); renderProjects(); renderTable();
   document.getElementById("updated").textContent = t("updated", { t: hm(data.generated_at) });
@@ -302,7 +359,7 @@ function render() {
 // ---------- calendar ----------
 let calScrolledWeek = null;
 function renderCalendar() {
-  hideCards([...OVERVIEW_CARDS, "c-setup"]);
+  hideCards([...OVERVIEW_CARDS, "c-setup", "c-pending"]);
   if (cal.error) { const c = card("c-calendar", t("error")); c.append(el("div", { class: "err", text: cal.error })); return; }
   const ws = new Date(cal.week.start), we = new Date(new Date(cal.week.end).getTime() - 1);
   const c = card("c-calendar", t("calTitle"), t("calNote", { a: localDate(ws), b: localDate(we), n: cal.slot_minutes }));
@@ -374,7 +431,7 @@ const STEPS = ["stepWelcome", "stepChecks", "stepLook", "stepTag", "stepRules", 
 const wiz = { step: 0, timer: null, edits: {} };
 
 function renderSetup() {
-  hideCards([...OVERVIEW_CARDS, "c-calendar"]);
+  hideCards([...OVERVIEW_CARDS, "c-calendar", "c-pending"]);
   clearInterval(wiz.timer);
   const c = card("c-setup", t("wizard"), null);
   const nav = el("div", { class: "steps" });
@@ -520,6 +577,7 @@ async function stepTag(body) {
     catch (e) { toast.textContent = e.message; toast.className = "toast err"; updateSave(); }
   });
   body.replaceChildren(el("h3", { text: t("tagTitle") }), el("p", { text: t("tagNote") }));
+  body.append(agentBox(() => { wiz.skipped = true; wiz.step = 4; renderSetup(); }));
   body.append(el("div", { class: "wiz-nav", style: "margin:0 0 10px" }, saveBtn, toast));
   body.append(el("h2", { style: "font-size:14px;margin:8px 0 0", text: `${t("tagNeed")} (${c.needs_tag.length})` }));
   const need = el("div", { class: "tagrows" });
@@ -559,8 +617,9 @@ function stepRules(body) {
 
 function stepDone(body, navBtns) {
   body.append(el("h3", { text: t("doneTitle") }), el("p", { text: t("doneBody") }),
-    el("div", { class: "nm", style: "font-weight:600", text: t("doneAgents") }), el("p", { text: t("doneAgentsBody") }), el("pre", { class: "cmd", text: "timetrace agent install" }),
-    el("div", { style: "font-weight:600", text: t("doneAw") }), el("p", { text: t("doneAwBody") }), el("pre", { class: "cmd", text: "timetrace sync-aw" }));
+    el("div", { class: "nm", style: "font-weight:600", text: t("doneAgents") }), el("p", { text: t("doneAgentsBody") }), cmdRow("timetrace agent install"),
+    el("div", { style: "font-weight:600;margin-top:14px", text: t("doneAgentTag") }), el("p", { text: t("doneAgentTagBody") }), cmdRow(AGENT_CMD),
+    el("div", { style: "font-weight:600", text: t("doneAw") }), el("p", { text: t("doneAwBody") }), cmdRow("timetrace sync-aw"));
   navBtns.append(el("button", { class: "btn primary", onclick: async () => {
     try { await post("settings", { setup_done: true }); } catch (e) { /* stays usable */ }
     state.view = "overview"; load();

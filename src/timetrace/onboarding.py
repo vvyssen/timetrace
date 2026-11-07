@@ -197,9 +197,34 @@ def _is_app_level(rule):
     return rule.get("title_re", "") in ("", ".", ".*") and "*" not in rule.get("apps", [])
 
 
+def pending(days=14):
+    """How much still needs a tag — for the dashboard's reminder."""
+    c = candidates(days, limit=200, review=0)
+    return {"days": days, "count": len(c["needs_tag"]), "seconds": sum(g["seconds"] for g in c["needs_tag"])}
+
+
+def _resolve_ids(tags):
+    """Fill kind / bundle / app / keyword / apps from a `suggest` id, so agents can tag by id."""
+    if not any(t.get("id") and not t.get("kind") for t in tags):
+        return tags
+    c = candidates(30, limit=500, review=200)
+    by_id = {g["id"]: g for g in c["needs_tag"] + c["review"]}
+    out = []
+    for t in tags:
+        if t.get("id") and not t.get("kind"):
+            g = by_id.get(t["id"])
+            if not g:
+                raise ValueError(f"unknown id {t['id']!r}; run `timetrace suggest --format json` for current ids")
+            t = {**{k: g[k] for k in ("kind", "bundle", "app", "keyword", "apps") if g.get(k) is not None}, **t}
+        out.append(t)
+    return out
+
+
 def apply_tags(tags):
     """Write user tags into config.yaml. Each tag: kind (ios_app | mac_app | mac_context), the item key
-    (bundle | app | keyword), domain, subdomain, evaluation, optional project, optional ignore."""
+    (bundle | app | keyword), domain, subdomain, evaluation, optional project, optional ignore.
+    Alternatively an `id` from `suggest`, which fills in the kind and key (and the app scope)."""
+    tags = _resolve_ids(tags)
     cfg = config.copy_cfg()
     evals = set(cfg["evaluations"])
     applied = []

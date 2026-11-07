@@ -52,6 +52,14 @@ Devices: `--device all|mac|iphone|ipad`. Times are shown in local time.
 - Browser time without a site keyword stays under a generic "web browsing" project.
 
 ## Helping the user tag
-1. `timetrace suggest --format json` lists uncategorized apps and broad-guess windows with time spent and sample titles.
-2. Propose a domain / subdomain / evaluation (and project for window keywords) for the top items, in a short table.
-3. After the user confirms, run one `timetrace tag …` per item. New subdomains are allowed.
+The user can get the full hand-off prompt with `timetrace agent prompt`; the workflow it asks for:
+1. `timetrace taxonomy --json` (labels in the user's language) and `timetrace suggest --days 14 --format json`
+   — uncategorized apps and broadly-guessed windows, each with an `id`, time spent, sample titles and current guess.
+2. Propose domain / subdomain / evaluation / project per item, most time first. Terminal and editor items are
+   usually project folders; browser items are pages or sites. Ask the user when a project could be work, study
+   or a personal interest — don't guess.
+3. Show one table and wait for the user's confirmation or corrections.
+4. Write with the id, which also keeps the tag scoped to the right apps (a project folder only in terminals and
+   editors, a site only in browsers): `timetrace tag --id "<id>" --domain … --subdomain … --evaluation … --project …`
+   (MCP: `tag` with `{"tags": [{"id": …, "domain": …, …}]}`). New subdomains are allowed. `--ignore` excludes an app.
+5. Run `suggest` again and report what is left.

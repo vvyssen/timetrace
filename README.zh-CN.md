@@ -49,6 +49,33 @@ curl -fsSL https://raw.githubusercontent.com/vvyssen/timetrace/main/install.sh |
 
 内置规则库覆盖约 100 个常见的中文和国际应用。它没法知道的是你自己的项目，配置向导问的正是这部分：终端里的项目目录、编辑器里的项目、你常逛的网站，以及规则库里没有的应用。
 
+### 跳过最麻烦的一步：让 Agent 帮你打标记
+
+打标记是向导里唯一费时间的一步。可以点「**暂时跳过**」，交给 AI Agent 来做。Agent 会：
+- 读出待标记的条目，用一张表给出建议；
+- 拿不准的地方先问你；
+- 等你确认后才写入。
+
+```bash
+timetrace agent install                  # 只需一次：连接 Claude Code / Codex / opencode
+claude "$(timetrace agent prompt)"       # Codex 用户：codex "$(timetrace agent prompt)"
+```
+
+其他 Agent（opencode、Hermes 等）：运行 `timetrace agent prompt`，把输出的提示词粘贴给它。还有没标完的条目时，看板首页会显示一条小提醒。
+
+<details><summary>提示词全文</summary>
+
+```text
+帮我把 timetrace 里还没分类好的时间打上标记。
+
+1. 先运行 `timetrace taxonomy --json` 了解我的领域、子领域和四种评价（创造 / 提升 / 保值 / 消遣），再运行 `timetrace suggest --days 14 --format json` 看待标记的条目。如果你能用 timetrace 的 MCP 工具，就用 taxonomy 和 suggest 工具。
+2. 按耗时从多到少，给每一条提出：领域 / 子领域 / 评价 / 项目名。依据是应用名、窗口示例和时长：终端、编辑器里的条目通常是我的项目目录；浏览器条目是网页或网站；手机应用看它是做什么的。
+3. 拿不准的（尤其是一个项目算工作、学习还是个人兴趣），直接问我，不要猜，可以一次问几个。
+4. 用一张表把建议列给我确认。我确认或修改后，再逐条写入：`timetrace tag --id <suggest 里的 id> --domain … --subdomain … --evaluation … --project …`（用 MCP 的话就用 tag 工具，并带上 id）。没得到我确认之前不要写入。
+5. 写完再跑一次 suggest，告诉我还剩几项、大概多少时间没标。
+```
+</details>
+
 ## 看板
 
 用 Spotlight 搜「**时间看板**」（英文系统搜 Timetrace），或者运行 `timetrace dash`。
