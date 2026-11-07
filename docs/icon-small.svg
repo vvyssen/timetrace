@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2a2e"/><stop offset="1" stop-color="#141416"/></linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".14"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185.4" fill="url(#bg)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="184" fill="none" stroke="url(#rim)" stroke-width="3"/>
+  <g>
+    <path fill="#2a78d6" d="M560.76 197.76 A318 318 0 0 1 826.24 463.24 A18 18 0 0 1 808.45 484 L714.85 484 A18 18 0 0 1 697.3 469.98 A190 190 0 0 0 554.02 326.7 A18 18 0 0 1 540 309.15 L540 215.55 A18 18 0 0 1 560.76 197.76 Z"/>
+    <path fill="#1baf7a" d="M826.24 560.76 A318 318 0 0 1 711.35 759.76 A18 18 0 0 1 684.47 754.74 L637.67 673.67 A18 18 0 0 1 641.04 651.46 A190 190 0 0 0 697.3 554.02 A18 18 0 0 1 714.85 540 L808.45 540 A18 18 0 0 1 826.24 560.76 Z"/>
+    <path fill="#eda100" d="M626.89 808.52 A318 318 0 0 1 264.24 711.35 A18 18 0 0 1 269.26 684.47 L350.33 637.67 A18 18 0 0 1 372.54 641.04 A190 190 0 0 0 568.26 693.48 A18 18 0 0 1 589.18 701.67 L635.98 782.74 A18 18 0 0 1 626.89 808.52 Z"/>
+    <path fill="#e34948" d="M215.48 626.89 A318 318 0 0 1 463.24 197.76 A18 18 0 0 1 484 215.55 L484 309.15 A18 18 0 0 1 469.98 326.7 A190 190 0 0 0 330.52 568.26 A18 18 0 0 1 322.33 589.18 L241.26 635.98 A18 18 0 0 1 215.48 626.89 Z"/>
+  </g>
+  <g stroke="#f2f1ee" stroke-width="52" stroke-linecap="round">
+    <line x1="512" y1="512" x2="512" y2="384"/>
+    <line x1="512" y1="512" x2="586.48" y2="555"/>
+  </g>
+  <circle cx="512" cy="512" r="40" fill="#f2f1ee"/>
+</svg>
