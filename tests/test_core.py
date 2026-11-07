@@ -196,6 +196,8 @@ def test_phone_access_is_read_only_and_needs_the_token(srv):
     phone = handler(server, "192.168.1.30", host="test-mac.local:27181")
     assert phone.access({"t": tok}) == "ro"
     assert phone.access({"t": tok + "x"}) is None
+    own_name = handler(server, "127.0.0.1", host="test-mac.local:27181")  # macOS resolves its own .local to loopback
+    assert own_name.access({"t": tok}) == "ro" and own_name.access({}) is None
     assert handler(server, "192.168.1.30", host="test-mac.local:27181", cookie=f"{server.COOKIE}={tok}").access({}) == "ro"
     assert "/api/setup/candidates" not in server.READ_ONLY_ROUTES and "/api/data" in server.READ_ONLY_ROUTES
     lan.rotate()

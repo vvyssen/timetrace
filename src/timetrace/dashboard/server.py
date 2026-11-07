@@ -316,9 +316,11 @@ class Handler(SimpleHTTPRequestHandler):
         return c[COOKIE].value if COOKIE in c else None
 
     def access(self, params):
-        """"rw" for this Mac, "ro" for another device holding the read-only link, None otherwise."""
-        if self._loopback():
-            return "rw" if self._host_ok() else None
+        """"rw" for this Mac at localhost, "ro" for anyone holding the read-only link (a phone, or this Mac
+        opening the link: macOS resolves its own .local name to 127.0.0.1), None otherwise. A DNS-rebinding
+        page reaches us as loopback with a foreign Host and no token, so it gets None."""
+        if self._loopback() and self._host_ok():
+            return "rw"
         return "ro" if lan.check(self._ro_token(params)) else None
 
     def end_headers(self):
@@ -353,7 +355,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.path = u.path
             return super().do_GET()
         if mode is None:
-            return self._denied() if u.path in ("/", "/index.html") and not self._loopback() else self.send_error(403)
+            return self._denied() if u.path in ("/", "/index.html") else self.send_error(403)
         if mode == "ro" and u.path not in READ_ONLY_ROUTES | {"/", "/index.html"}:
             return self.send_error(403)
         ro_token = self._ro_token(params) if mode == "ro" else None
