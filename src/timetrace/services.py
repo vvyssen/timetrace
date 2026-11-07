@@ -167,7 +167,8 @@ def conflicts():
     for pid in pids:
         if f"pid = {pid}" not in mine:
             out.append(f"port {port} is already used by pid {pid}")
-    r = _run(["pgrep", "-fl", "aw_import_screentime|aw-import-screentime"])
+    # only processes actually running an importer, not any command line that happens to mention the name
+    r = _run(["pgrep", "-fl", "aw-import-screentime watch|aw_import_screentime watch"])
     imp = _run(["launchctl", "print", f"{_domain()}/{labels()['importer']}"]).stdout
     helper_pid = next((l.split("=")[1].strip() for l in imp.splitlines() if l.strip().startswith("pid =")), None)
     for line in r.stdout.splitlines():
