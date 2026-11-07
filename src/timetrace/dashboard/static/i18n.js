@@ -49,7 +49,7 @@ window.I18N = {
     subPlaceholder: "子领域（可新建）",
     rulesTitle: "时长规则", rulesNote: "购物、外卖、聊天这类应用，短时间用通常是办事，连续用很久就是消遣。这里设定「多久算久」。",
     rulesGap: "中间离开不超过这么久，仍算同一次使用（分钟）", rulesOver: "{subs}：单次超过（分钟）算{ev}",
-    doneTitle: "配置完成", doneBody: "以后打开看板：用 Spotlight 搜「时间看板」，或运行 timetrace dash。随时可以从右上角「设置」回到这里。",
+    doneTitle: "配置完成", doneBody: "以后打开看板：用 Spotlight 搜「Timetrace」（中文系统下也叫「时间看板」），或运行 timetrace dash。随时可以从右上角「设置」回到这里。",
     doneAgents: "让 AI Agent 使用你的时间数据", doneAgentsBody: "在终端运行下面这行，会给本机的 Claude Code、Codex、opencode 注册 MCP 服务和使用说明：",
     doneAw: "可选：把分类同步到 ActivityWatch 自己的界面", doneAwBody: "运行下面这行（先演练，确认后加 --apply）：",
     openDashboard: "进入看板",

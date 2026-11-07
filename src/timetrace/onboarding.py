@@ -115,7 +115,7 @@ def site_of(title):
     return None
 
 
-def candidates(days=14, limit=20, review=8):
+def candidates(days=14, limit=20, review=12):
     """Items worth tagging: uncategorized apps, and windows that only matched a broad guess."""
     cfg = config.get()
     u = cfg["uncategorized"]
@@ -149,9 +149,13 @@ def candidates(days=14, limit=20, review=8):
         elif _is_broad(rule, r["app"], rules_by_name):
             if r["app"].lower() in BROWSERS:
                 site = site_of(r["title"])
-                if not site:
-                    continue
-                key, label = site, f"{r['app']} · {site}"
+                if site:
+                    key, label = site, f"{r['app']} · {site}"
+                else:  # no "- Site" suffix: the page itself is the item; kept only if it adds up (see below)
+                    page = C.clean_title(r["title"]).rstrip("…. ")[:40]
+                    if len(page) < 4:
+                        continue
+                    key, label = page, f"{r['app']} · {page}"
             else:
                 key = r["context"]
                 if r["app"].lower() in C.EDITORS and " / " in key:  # "file / project": ask about the project
@@ -170,8 +174,16 @@ def candidates(days=14, limit=20, review=8):
         g["samples"] = [t for t, _ in g["samples"].most_common(3)]
         g["id"] = f"{g['kind']}:{g.get('bundle') or g.get('keyword') or g['app']}"
         rows.append(g)
-    need = sorted((g for g in rows if g["needs_tag"] and g["seconds"] >= 120), key=lambda g: -g["seconds"])[:limit]
-    ok = sorted((g for g in rows if not g["needs_tag"]), key=lambda g: -g["seconds"])[:review]
+    sites = {site_of(t) for g in rows for t in g["samples"]}
+    def worth(g):  # single pages only when they add up to 10+ minutes; everything else from 2 minutes
+        is_page = g["kind"] == "mac_context" and g["app"].lower() in BROWSERS and g["keyword"] not in sites
+        return g["seconds"] >= (600 if is_page else 120)
+    need = sorted((g for g in rows if g["needs_tag"] and worth(g)), key=lambda g: -g["seconds"])[:limit]
+    # review the most used already-classified apps per device type, so a busy phone can't crowd out the Mac
+    done = sorted((g for g in rows if not g["needs_tag"]), key=lambda g: -g["seconds"])
+    mac = [g for g in done if g["kind"] == "mac_app"][: (review + 1) // 2]
+    mobile = [g for g in done if g["kind"] == "ios_app"][: review - len(mac)]
+    ok = sorted(mac + mobile, key=lambda g: -g["seconds"])
     return {"days": days, "needs_tag": need, "review": ok,
             "domains": cfg["domains"], "evaluations": config.eval_order(cfg)[:-1],
             "evaluation_roles": cfg["evaluation_roles"], "uncategorized": u}
