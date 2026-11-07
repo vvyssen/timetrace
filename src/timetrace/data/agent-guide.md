@@ -42,6 +42,7 @@ timetrace tag --bundle com.example.app --domain 生活 --subdomain 购物 --eval
 timetrace tag --mac-app "Some App" --domain 工作 --subdomain 开发 --evaluation 创造
 timetrace tag --keyword my-repo --domain 工作 --subdomain 开发 --evaluation 创造 --project my-repo
 timetrace doctor   # is data flowing? (ActivityWatch, Mac, iPhone/iPad importer, permissions)
+timetrace lan url --date today   # read-only dashboard link for the user's phone (only if they turned phone access on)
 ```
 Ranges: `--date 2026-11-03|today|yesterday`, `--from … --to …`, or `--since 7d|24h|90m|2w`. Default: last 7 days.
 Devices: `--device all|mac|iphone|ipad`. Times are shown in local time.

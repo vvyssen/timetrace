@@ -4,6 +4,7 @@ import csv
 import json
 import subprocess
 import sys
+from datetime import datetime, timedelta
 
 from . import __version__, aw, classify as C, config, onboarding, paths, queries as Q, settings
 
@@ -242,6 +243,36 @@ def cmd_agent(a):
         print("run `timetrace agent install` to register the MCP server and skill")
 
 
+def cmd_lan(a):
+    from . import lan, services
+    if a.action in ("on", "off"):
+        lan.enable() if a.action == "on" else lan.disable()
+        restarted = services.restart("dashboard")
+        print(f"phone access {'on (read-only)' if a.action == 'on' else 'off'}" + ("" if restarted else " — dashboard service not loaded; start it with timetrace install"))
+    elif a.action == "rotate":
+        lan.rotate()
+        print("new link; links sent before no longer work")
+    if a.action == "url" or (a.action in ("on", "rotate") and lan.enabled()):
+        if not lan.enabled():
+            print("phone access is off — turn it on with: timetrace lan on", file=sys.stderr)
+            sys.exit(1)
+        date = a.date
+        if date in ("today", "yesterday"):
+            date = (datetime.now() - timedelta(days=date == "yesterday")).strftime("%Y-%m-%d")
+        urls = lan.urls(date)
+        if not urls:
+            print("no local network address found — is this Mac on Wi-Fi?", file=sys.stderr)
+            sys.exit(1)
+        print("\n".join(urls if a.all or a.action != "url" else urls[:1]))
+    elif a.action == "status":
+        st = lan.status()
+        print(f"phone access: {'on (read-only)' if st['enabled'] else 'off'}")
+        for u in st["urls"]:
+            print(f"  {u}")
+        if st["enabled"] and st["firewall"]:
+            print("firewall is on: allow Python to accept incoming connections if macOS asks")
+
+
 def cmd_config(a):
     if a.action == "path":
         print(paths.CONFIG)
@@ -355,6 +386,14 @@ def build_parser():
     ag.add_argument("--lang", choices=["zh", "en"], help="for prompt")
     ag.add_argument("--only", help="comma-separated subset, e.g. claude,codex")
     ag.set_defaults(func=cmd_agent)
+
+    ln = sub.add_parser("lan", help="read-only dashboard link for phones on the same Wi-Fi (off by default)",
+                        description="Let phones on the same network view the dashboard read-only. Writes stay on this Mac.")
+    ln.add_argument("action", choices=["status", "on", "off", "url", "rotate"], nargs="?", default="status",
+                    help="status | on | off | url (print the link) | rotate (new link; old links stop working)")
+    ln.add_argument("--date", help="for url: open this day's overview — today, yesterday or YYYY-MM-DD")
+    ln.add_argument("--all", action="store_true", help="for url: also print the IP-address links")
+    ln.set_defaults(func=cmd_lan)
 
     cf = sub.add_parser("config", help="your rules file")
     cf.add_argument("action", choices=["path", "import", "reset", "lang"])

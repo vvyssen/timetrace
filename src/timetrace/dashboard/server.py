@@ -1,10 +1,12 @@
 """timetrace dashboard — local web app on 127.0.0.1 (overview, calendar, setup wizard).
 
 All numbers come from timetrace.intervals, so duration rules, opencode recovery and edits to
-config.yaml apply as-is. Writes need a per-start token and a local Host header (no CSRF, no DNS
-rebinding).
+config.yaml apply as-is. Writes need a per-start token, a loopback client and a local Host header
+(no CSRF, no DNS rebinding). With phone access on (see lan.py) it also listens on the local
+network, where only read routes are served and only with the read-only token.
 """
 import collections
+import ipaddress
 import json
 import os
 import secrets
@@ -12,13 +14,16 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timedelta
+from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .. import __version__, config, intervals as I, onboarding, paths, services, settings
+from .. import __version__, config, intervals as I, lan, onboarding, paths, services, settings
 
 TOKEN = secrets.token_urlsafe(24)
 STATIC = {"/favicon.png", "/apple-touch-icon.png", "/icon-512.png", "/manifest.webmanifest", "/i18n.js", "/app.js"}
+READ_ONLY_ROUTES = {"/api/data", "/api/calendar", "/api/meta"}  # what a phone with the read-only link may fetch
+COOKIE = "tt_ro"
 WEEKDAYS = {"zh": "一二三四五六日", "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
 _lock = threading.Lock()
 _cache = {}
@@ -63,8 +68,9 @@ def pieces(r, start, end, unit):
     ratio = min(1.0, r["seconds"] / span)
     cur, e = s.astimezone(I.LOCAL), e.astimezone(I.LOCAL)
     while cur < e:
-        if unit == "hour":
-            nxt, key = cur.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1), cur.hour
+        if unit in ("hour", "dayhour"):
+            nxt = cur.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            key = cur.hour if unit == "hour" else (cur.date().isoformat(), cur.hour)
         else:
             nxt, key = cur.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1), cur.date().isoformat()
         stop = min(nxt, e)
@@ -86,6 +92,8 @@ def build(params):
         days[d.date().isoformat()] = evals_dict(order)
         d += timedelta(days=1)
     hours = [evals_dict(order) for _ in range(24)]
+    ev_idx = {e: i for i, e in enumerate(order)}
+    heat = {k: [[0.0] * len(order) for _ in range(24)] for k in days} if len(days) > 1 else None  # day x hour x evaluation
     dom = collections.defaultdict(lambda: {"evals": evals_dict(order), "subs": collections.defaultdict(lambda: evals_dict(order))})
     proj = collections.defaultdict(lambda: {"evals": evals_dict(order), "devices": set()})
     apps = collections.defaultdict(lambda: {"evals": evals_dict(order), "domain": "", "project": ""})
@@ -98,6 +106,10 @@ def build(params):
                 clipped += sec
         for k, sec in pieces(r, start, end, "hour"):
             hours[k][ev] += sec
+        if heat is not None:
+            for (dk, h), sec in pieces(r, start, end, "dayhour"):
+                if dk in heat:
+                    heat[dk][h][ev_idx[ev]] += sec
         if clipped <= 0:
             continue
         total += clipped
@@ -133,6 +145,7 @@ def build(params):
             "total": total, "by_eval": by_eval, "by_device": by_dev,
             "daily": [{"date": k, "evals": v} for k, v in days.items()],
             "hourly": [{"hour": h, "evals": v} for h, v in enumerate(hours)],
+            "heat": {"evals": order, "days": [{"date": k, "h": [[round(x) for x in hr] for hr in v]} for k, v in heat.items()]} if heat else None,
             "domains": domains, "projects": projects, "apps": app_rows, "timeline": timeline}
 
 
@@ -267,6 +280,13 @@ def action(name, body):
         if allowed.get("lang") not in (None, "zh", "en"):
             raise ValueError("lang must be zh or en")
         return settings.save(**allowed)
+    elif name == "lan":  # phone access: {"enabled": bool} and/or {"rotate": true}
+        if "enabled" in body:
+            lan.enable() if body["enabled"] else lan.disable()
+        if body.get("rotate"):
+            lan.rotate()
+        rebind()
+        return lan.status()
     elif name == "reset-labels":  # regenerate rule labels in the chosen language (only offered before any tagging)
         config.init(lang=body.get("lang") or settings.load()["lang"], force=True)
     else:
@@ -283,6 +303,39 @@ class Handler(SimpleHTTPRequestHandler):
         host = h[: h.rfind(":")] if h.rfind(":") > h.rfind("]") else h  # strip :port, keep [::1]
         return host in ("127.0.0.1", "localhost", "[::1]")
 
+    def _loopback(self):
+        try:
+            return ipaddress.ip_address(self.client_address[0]).is_loopback
+        except ValueError:
+            return False
+
+    def _ro_token(self, params):
+        if params.get("t"):
+            return params["t"]
+        c = SimpleCookie(self.headers.get("Cookie") or "")
+        return c[COOKIE].value if COOKIE in c else None
+
+    def access(self, params):
+        """"rw" for this Mac, "ro" for another device holding the read-only link, None otherwise."""
+        if self._loopback():
+            return "rw" if self._host_ok() else None
+        return "ro" if lan.check(self._ro_token(params)) else None
+
+    def end_headers(self):
+        self.send_header("Referrer-Policy", "no-referrer")
+        super().end_headers()
+
+    def _denied(self):
+        msg = ("这个链接已失效，或者这台 Mac 关闭了手机访问。请在 Mac 上的看板里打开「手机查看」获取新链接。\n"
+               "This link has expired, or phone access is off on the Mac. Open “Phone” in the dashboard on the Mac for a new link.")
+        body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+                f'<title>Timetrace</title><body style="font:16px/1.6 system-ui;padding:24px;white-space:pre-line">{msg}</body>').encode()
+        self.send_response(403)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _json(self, obj, code=200):
         body = json.dumps(obj, ensure_ascii=False, default=str).encode()
         self.send_response(code)
@@ -293,37 +346,52 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if not self._host_ok():
-            return self.send_error(403)
         u = urlparse(self.path)
         params = {k: v[0] for k, v in parse_qs(u.query).items()}
+        mode = self.access(params)
+        if u.path in STATIC and (mode or lan.enabled()):  # icons and scripts are public assets
+            self.path = u.path
+            return super().do_GET()
+        if mode is None:
+            return self._denied() if u.path in ("/", "/index.html") and not self._loopback() else self.send_error(403)
+        if mode == "ro" and u.path not in READ_ONLY_ROUTES | {"/", "/index.html"}:
+            return self.send_error(403)
+        ro_token = self._ro_token(params) if mode == "ro" else None
+        params.pop("t", None)
         routes = {"/api/data": lambda: cached("data", params, build), "/api/calendar": lambda: cached("cal", params, build_calendar),
                   "/api/meta": meta, "/api/setup/status": onboarding.status,
                   "/api/setup/first-look": lambda: onboarding.first_look(int(params.get("days", 14))),
                   "/api/setup/candidates": lambda: onboarding.candidates(int(params.get("days", 14))),
                   "/api/setup/pending": lambda: cached("pending", {}, lambda p: onboarding.pending()),
-                  "/api/setup/agent": agent_info}
+                  "/api/setup/agent": agent_info, "/api/lan": lambda: {**lan.status(), "listening": bool(_server["httpd"]) and _server["httpd"].server_address[0] != "127.0.0.1"}}
         if u.path in routes:
             try:
                 return self._json(routes[u.path]())
             except Exception as e:
                 return self._json({"error": f"{type(e).__name__}: {e}"}, 500)
-        if u.path in STATIC:
-            self.path = u.path
-            return super().do_GET()
         if u.path not in ("/", "/index.html"):
             return self.send_error(404)
-        html = (paths.STATIC / "index.html").read_text(encoding="utf-8").replace("__TIMETRACE_TOKEN__", TOKEN)
+        html = (paths.STATIC / "index.html").read_text(encoding="utf-8")
+        html = html.replace("__TIMETRACE_TOKEN__", TOKEN if mode == "rw" else "").replace("__TIMETRACE_RO__", "true" if mode == "ro" else "false")
         body = html.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        if mode == "ro":  # keep the phone signed in after the first visit, even from a bookmark without ?t=
+            self.send_header("Set-Cookie", f"{COOKIE}={ro_token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
+    def do_HEAD(self):  # the stdlib would answer HEAD for any file in the static dir, bypassing access()
+        u = urlparse(self.path)
+        if u.path in STATIC and (self.access({}) or lan.enabled()):
+            self.path = u.path
+            return super().do_HEAD()
+        return self.send_error(405 if self.access({}) else 403)
+
     def do_POST(self):
-        if not self._host_ok() or self.headers.get("X-Timetrace-Token") != TOKEN:
+        if not (self._loopback() and self._host_ok()) or self.headers.get("X-Timetrace-Token") != TOKEN:
             return self.send_error(403)
         u = urlparse(self.path)
         if not u.path.startswith("/api/action/"):
@@ -345,12 +413,34 @@ class Handler(SimpleHTTPRequestHandler):
         pass
 
 
+_server = {"httpd": None, "rebind": False}
+
+
+def bind_host():
+    return "0.0.0.0" if lan.enabled() else "127.0.0.1"
+
+
+def rebind():
+    """Listen again on the address the settings ask for, after phone access was switched on or off."""
+    httpd = _server["httpd"]
+    if httpd is None or httpd.server_address[0] == bind_host():
+        return False
+    _server["rebind"] = True
+    threading.Timer(0.3, httpd.shutdown).start()  # let the current response go out first
+    return True
+
+
 def main():
     port = int(os.environ.get("TIMETRACE_PORT") or settings.load()["port"])
     ThreadingHTTPServer.allow_reuse_address = True
-    with ThreadingHTTPServer(("127.0.0.1", port), Handler) as httpd:
-        print(f"timetrace dashboard on http://127.0.0.1:{port}", flush=True)
-        httpd.serve_forever()
+    while True:
+        host = bind_host()
+        with ThreadingHTTPServer((host, port), Handler) as httpd:
+            _server.update(httpd=httpd, rebind=False)
+            print(f"timetrace dashboard on http://127.0.0.1:{port}" + (" (+ read-only on the local network)" if host != "127.0.0.1" else ""), flush=True)
+            httpd.serve_forever()
+        if not _server["rebind"]:
+            break
 
 
 if __name__ == "__main__":

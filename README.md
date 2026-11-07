@@ -73,8 +73,19 @@ Help me tag the time in timetrace that isn't categorized well yet.
 Open it from Spotlight (**Timetrace**, or **时间看板** in Chinese) or with `timetrace dash`.
 
 - **Overview** — totals by evaluation, per device, per day, per hour, domains and top projects; today / yesterday / 7 / 30 days or any day.
+- **Hours of the week** — in the 7- and 30-day views, a heatmap of hour × day (30 days: averaged by weekday). Filter by evaluation — e.g. *Unwind* — to see when that time happens, with a one-line summary of the peak hours and the late-night share.
 - **Calendar** — a week view with one lane per device: each block is the main project of that stretch, colored by its evaluation.
-- Chinese and English, light and dark, colorblind-checked palette.
+- Chinese and English, light and dark, colorblind-checked palette, laid out for phones too.
+
+### On your phone
+
+Off by default. Turn it on under **Phone** in the dashboard, or with `timetrace lan on`: phones on the same Wi‑Fi can then open a read-only link such as `http://Your-Mac.local:27181/?t=…`. The link carries a random access code; tagging and settings still only work on the Mac, and `timetrace lan rotate` makes old links stop working.
+
+```bash
+timetrace lan on                      # listen on the local network (read-only) and print the link
+timetrace lan url --date today        # a link straight to one day — handy for a nightly report message
+timetrace lan off
+```
 
 ![Calendar](docs/screenshots/calendar-en.png)
 

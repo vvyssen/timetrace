@@ -22,6 +22,7 @@ function applyStatic() {
   slot.setAttribute("aria-label", t("slot"));
   [...slot.options].forEach(o => { o.textContent = o.value === "60" ? t("slot60") : t("slotN", { n: o.value }); });
   document.querySelectorAll("#langs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.l === LANG)));
+  if (window.TT_READONLY) document.querySelector("header .sub").textContent = t("roSub");
 }
 function setMeta(m) {
   if (!m) return;
@@ -85,8 +86,11 @@ const hideTip = () => { tip.style.display = "none"; };
 function hover(node, fn) {
   node.setAttribute("tabindex", "0"); node.classList.add("hit");
   node.addEventListener("pointerenter", e => fn(e)); node.addEventListener("pointermove", moveTip);
-  node.addEventListener("pointerleave", hideTip); node.addEventListener("focus", e => fn(e)); node.addEventListener("blur", hideTip);
+  node.addEventListener("pointerleave", e => { if (e.pointerType !== "touch") hideTip(); });  // a tap keeps the tip open
+  node.addEventListener("focus", e => fn(e)); node.addEventListener("blur", hideTip);
 }
+document.addEventListener("pointerdown", e => { if (e.pointerType === "touch" && !(e.target.closest && e.target.closest(".hit"))) hideTip(); }, { passive: true });
+window.addEventListener("scroll", hideTip, { passive: true });
 const evalRows = (o, total) => EVALS.filter(e => o[e] > 0).map(e => [`${e}${total ? " · " + pct(o[e], total) : ""}`, fmt(o[e]), col(e)]);
 
 function card(id, title, note) {
@@ -138,7 +142,7 @@ function agentBox(onSkip) {
 async function renderPending() {
   const b = document.getElementById("c-pending");
   b.hidden = true;
-  if (!META || !META.setup_done || state.view !== "overview") return;
+  if (!META || !META.setup_done || state.view !== "overview" || window.TT_READONLY) return;
   try { if (sessionStorage.getItem("tt-pending-dismissed")) return; } catch (e) {}
   let p;
   try { p = await api("/api/setup/pending"); } catch (e) { return; }
@@ -151,7 +155,7 @@ async function renderPending() {
   b.hidden = false;
 }
 
-const OVERVIEW_CARDS = ["c-summary", "c-timeline", "c-daily", "c-hourly", "c-domains", "c-projects", "c-table"];
+const OVERVIEW_CARDS = ["c-summary", "c-timeline", "c-daily", "c-heat", "c-hourly", "c-domains", "c-projects", "c-table"];
 const hideCards = ids => ids.forEach(id => { document.getElementById(id).hidden = true; });
 
 // ---------- overview ----------
@@ -256,6 +260,75 @@ function renderHourly() {
   });
 }
 
+// ---------- heatmap: hour of day x day (7 days) or weekday (longer ranges), one evaluation at a time ----------
+function richT(key, vars) {  // t() with the filled-in values in bold
+  const s = (I18N[LANG] || I18N.en)[key] ?? I18N.en[key] ?? key;
+  return s.split(/(\{\w+\})/).filter(Boolean).map(part => { const m = part.match(/^\{(\w+)\}$/); return m ? el("b", { text: vars[m[1]] ?? "" }) : part; });
+}
+const clock = h => h === 24 ? "24:00" : `${String(h % 24).padStart(2, "0")}:00`;
+const HEAT_OPACITY = v => 0.15 + 0.85 * Math.pow(v, 0.7);  // one hue, light -> dark; empty cells stay blank
+function renderHeat() {
+  const c = document.getElementById("c-heat");
+  const H = data.heat;
+  if (!H || data.range.days <= 1 || data.total <= 0) { c.hidden = true; return; }
+  c.replaceChildren(); c.hidden = false;
+  const ix = Object.fromEntries(H.evals.map((e, i) => [e, i]));
+  const evs = EVALS.slice(0, 4);
+  const sel = evs.find(e => ROLE[e] === state.heat) || null;
+  const cellVal = hr => sel ? (hr[ix[sel]] || 0) : hr.reduce((a, b) => a + b, 0);
+  const byWd = H.days.length > 14;
+  let rows;
+  if (!byWd) rows = H.days.map(d => { const dt = new Date(d.date + "T12:00"); return { label: `${weekdayName(dt)} ${d.date.slice(5).replace("-", "/")}`, title: `${d.date} ${weekdayName(dt)}`, h: d.h }; });
+  else {
+    rows = [1, 2, 3, 4, 5, 6, 0].map(w => ({ w, n: 0, label: t("weekday", { d: t("weekdays")[w] }), h: Array.from({ length: 24 }, () => H.evals.map(() => 0)) }));
+    H.days.forEach(d => { const r = rows.find(x => x.w === new Date(d.date + "T12:00").getDay()); r.n++; d.h.forEach((hr, h) => hr.forEach((v, i) => { r.h[h][i] += v; })); });
+    rows.forEach(r => { if (r.n) r.h = r.h.map(hr => hr.map(v => v / r.n)); r.title = `${r.label} · ${t("heatAvgN", { n: r.n })}`; });
+  }
+  // header: title + evaluation filter
+  const seg = el("div", { class: "seg small", role: "group", "aria-label": t("heatFilter") });
+  [["all", t("heatAll"), null], ...evs.map(e => [ROLE[e], e, col(e)])].forEach(([k, name, color]) => {
+    const b = el("button", { type: "button", "aria-pressed": String((sel ? ROLE[sel] : "all") === k) }, color ? el("span", { class: "sw", style: `background:${color}` }) : null, name);
+    b.addEventListener("click", () => { state.heat = k; saveState(); renderHeat(); });
+    seg.append(b);
+  });
+  const title = `${sel || t("heatAll")} · ${data.range.key === "7d" ? t("heatTitle7") : t("heatTitleN", { n: data.range.days })}`;
+  c.append(el("div", { class: "heat-head" }, el("div", {}, el("h2", { text: title }), el("p", { class: "note", text: byWd ? t("heatNoteWd", { n: H.days.length }) : t("heatNote7") })), seg));
+  // one-line summary: where the selected time concentrates, and how much of it is late at night
+  const colTot = Array(24).fill(0);
+  H.days.forEach(d => d.h.forEach((hr, h) => { colTot[h] += cellVal(hr); }));
+  const tot = colTot.reduce((a, b) => a + b, 0);
+  if (tot <= 0) { c.append(el("div", { class: "empty", text: t("heatEmpty", { ev: sel || t("heatAll") }) })); return; }
+  let best = -1, bi = 0;
+  for (let i = 0; i < 24; i++) { const v = colTot[i] + colTot[(i + 1) % 24] + colTot[(i + 2) % 24]; if (v > best) { best = v; bi = i; } }
+  const night = [22, 23, 0, 1, 2, 3, 4].reduce((a, h) => a + colTot[h], 0);
+  c.append(el("div", { class: "heat-sum" }, ...richT("heatSum", { ev: sel || t("heatAllTime"), v: fmt(tot), a: clock(bi), b: clock(bi + 3 > 24 ? (bi + 3) % 24 : bi + 3), p: pct(best, tot), q: pct(night, tot) })));
+  // grid
+  const box = el("div"); c.append(box);
+  const W = box.clientWidth || c.clientWidth - 36 || 800, narrow = W < 520;
+  const padL = narrow ? 64 : 88, padT = 16, gap = 2, cw = (W - padL) / 24, ch = Math.max(18, Math.min(30, cw * 0.95));
+  const max = Math.max(...rows.flatMap(r => r.h.map(cellVal)), 1);
+  const color = sel ? col(sel) : "var(--ink-2)";
+  const svg = sv("svg", { width: W, height: padT + rows.length * ch, role: "img", "aria-label": `${title}. ${c.querySelector(".heat-sum").textContent}` });
+  for (let h = 0; h < 24; h += narrow ? 6 : 3) { const lab = sv("text", { x: padL + h * cw + 1, y: 10 }); lab.textContent = String(h).padStart(2, "0"); svg.append(lab); }
+  rows.forEach((r, i) => {
+    const y = padT + i * ch;
+    const lab = sv("text", { x: 0, y: y + ch / 2 + 4 }); lab.textContent = r.label; lab.style.fill = "var(--ink-2)"; svg.append(lab);
+    r.h.forEach((hr, h) => {
+      const v = cellVal(hr), x = padL + h * cw, g = sv("g", { class: "heat-cell" });
+      g.append(sv("rect", { x: x + gap / 2, y: y + gap / 2, width: cw - gap, height: ch - gap, rx: 3, fill: "var(--wash)" }));
+      if (v > 0) g.append(sv("rect", { x: x + gap / 2, y: y + gap / 2, width: cw - gap, height: ch - gap, rx: 3, fill: color, "fill-opacity": HEAT_OPACITY(v / max).toFixed(3) }));
+      const when = `${r.title} · ${clock(h)}–${clock(h + 1)}${byWd ? t("heatAvg") : ""}`;
+      hover(g, ev => showTip(ev, when, sel ? [[sel, fmt(v), col(sel)]] : evalRows(Object.fromEntries(H.evals.map((e, k) => [e, hr[k]])), v)));
+      svg.append(g);
+    });
+  });
+  box.append(svg);
+  const ramp = el("div", { class: "ramp" }, t("heatLess"));
+  [0, 0.25, 0.5, 0.75, 1].forEach(f => ramp.append(el("i", { style: `background:${color};opacity:${HEAT_OPACITY(f).toFixed(3)}` })));
+  ramp.append(t("heatMore"), " · ", t("heatMax", { v: fmt(max) }));
+  c.append(ramp);
+}
+
 function barRow(parent, name, small, evals, maxTotal, { sub = false, onclick = null, tipTitle = name } = {}) {
   const tt = sum(evals);
   const nm = el("div", { class: "name" + (sub ? " sub" : "") + (onclick ? " row-btn" : ""), title: name }, name, small ? el("small", { text: small }) : null);
@@ -290,7 +363,7 @@ function renderDomains() {
 function renderProjects() {
   const c = card("c-projects", t("projects"), t("projectsNote"));
   if (!data.projects.length) { c.append(el("div", { class: "empty", text: t("noData") })); return; }
-  const bars = el("div", { class: "bars", style: "grid-template-columns:minmax(120px,300px) 1fr 64px" });
+  const bars = el("div", { class: "bars wide" });
   const max = Math.max(...data.projects.map(p => sum(p.evals)));
   data.projects.forEach(p => barRow(bars, p.project, `${[p.domain, p.subdomain].filter(Boolean).join("/")} · ${p.devices.join("+")}`, p.evals, max, { tipTitle: p.project }));
   c.append(bars);
@@ -340,6 +413,36 @@ function renderTable() {
   tbl.append(tb); det.append(el("div", { class: "tablewrap" }, tbl)); c.append(det);
 }
 
+// ---------- phone access (read-only link on the local network) ----------
+async function renderPhone() {
+  hideCards([...OVERVIEW_CARDS, "c-calendar", "c-setup", "c-pending"]);
+  const c = card("c-phone", t("phoneTitle"), null);
+  c.append(el("p", { class: "note", style: "max-width:820px;font-size:13px", text: t("phoneLead") }));
+  let st;
+  try { st = await api("/api/lan"); } catch (e) { c.append(el("div", { class: "err", text: e.message })); return; }
+  const toast = el("span", { class: "toast" });
+  const act = async body => {
+    try { await post("lan", body); } catch (e) { toast.textContent = e.message; toast.className = "toast err"; return; }
+    await new Promise(r => setTimeout(r, 800));  // the server is listening again on the new address
+    if (state.view === "phone") renderPhone();
+  };
+  c.append(el("div", { class: "phone-state" },
+    el("span", { class: "pill" + (st.enabled ? " on" : "") }, el("i"), st.enabled ? t("phoneOn") : t("phoneOff")),
+    el("button", { class: "btn" + (st.enabled ? "" : " primary"), type: "button", onclick: () => act({ enabled: !st.enabled }) }, st.enabled ? t("phoneDisable") : t("phoneEnable")),
+    st.enabled ? el("button", { class: "btn", type: "button", onclick: () => act({ rotate: true }) }, t("phoneRotate")) : null, toast));
+  if (st.enabled) {
+    if (!st.listening) c.append(el("p", { class: "err", text: t("phoneRestart") }));
+    if (!st.urls.length) c.append(el("p", { class: "err", text: t("phoneNoNet") }));
+    st.urls.forEach((u, i) => c.append(el("div", { class: "linkrow" }, el("div", { class: "lbl", text: i === 0 && st.hostname ? t("phoneLinkMain") : t("phoneLinkIp") }), cmdRow(u))));
+    c.append(el("p", { class: "note", text: t("phoneRotateNote") }),
+      el("div", { style: "font-weight:600;margin-top:14px", text: t("phoneDaily") }), el("p", { class: "note", text: t("phoneDailyBody") }), cmdRow("timetrace lan url --date today"));
+  }
+  const tips = el("ul", { class: "tips" }, el("li", { text: t("phoneTipSafari") }), el("li", { text: t("phoneTipHome") }));
+  if (st.firewall) tips.append(el("li", { text: t("phoneTipFirewall") }));
+  c.append(el("div", { style: "font-weight:600;margin-top:14px", text: t("phoneTips") }), tips,
+    el("div", { class: "wiz-nav" }, el("button", { class: "btn", type: "button", onclick: () => { state.view = "overview"; load(); } }, t("phoneBack"))));
+}
+
 function rangeLabel() {
   const s = data.range.start.slice(0, 10), e = new Date(new Date(data.range.end).getTime() - 1);
   const names = { today: t("today"), yesterday: t("yesterday"), "7d": t("last7"), "30d": t("last30"), day: "" };
@@ -349,17 +452,17 @@ function rangeLabel() {
 }
 
 function render() {
-  hideCards(["c-calendar", "c-setup"]);
+  hideCards(["c-calendar", "c-setup", "c-phone"]);
   renderPending();
   if (data.error) { hideCards(OVERVIEW_CARDS); const c = card("c-summary", t("error")); c.append(el("div", { class: "err", text: data.error })); return; }
-  renderSummary(); renderTimeline(); renderDaily(); renderHourly(); renderDomains(); renderProjects(); renderTable();
+  renderSummary(); renderTimeline(); renderDaily(); renderHeat(); renderHourly(); renderDomains(); renderProjects(); renderTable();
   document.getElementById("updated").textContent = t("updated", { t: hm(data.generated_at) });
 }
 
 // ---------- calendar ----------
 let calScrolledWeek = null;
 function renderCalendar() {
-  hideCards([...OVERVIEW_CARDS, "c-setup", "c-pending"]);
+  hideCards([...OVERVIEW_CARDS, "c-setup", "c-pending", "c-phone"]);
   if (cal.error) { const c = card("c-calendar", t("error")); c.append(el("div", { class: "err", text: cal.error })); return; }
   const ws = new Date(cal.week.start), we = new Date(new Date(cal.week.end).getTime() - 1);
   const c = card("c-calendar", t("calTitle"), t("calNote", { a: localDate(ws), b: localDate(we), n: cal.slot_minutes }));
@@ -627,9 +730,16 @@ function stepDone(body, navBtns) {
 }
 
 // ---------- state & loading ----------
-const state = { view: "overview", range: "today", date: null, device: "all", slot: "15", calDate: null };
+const state = { view: "overview", range: "today", date: null, device: "all", slot: "15", calDate: null, heat: "all" };
+let lastQuery = "";
+function saveState() {
+  try { localStorage.setItem("tt-dash", JSON.stringify(state)); } catch (e) {}
+  const h = new URLSearchParams(lastQuery);
+  if (state.view === "overview" && state.heat && state.heat !== "all") h.set("heat", state.heat);
+  if (lastQuery) history.replaceState(null, "", "#" + h.toString());
+}
 function syncControls() {
-  const calv = state.view === "calendar", setupv = state.view === "setup";
+  const calv = state.view === "calendar", setupv = state.view === "setup" || state.view === "phone";
   document.getElementById("filters").hidden = setupv;
   document.querySelectorAll("#views button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === state.view)));
   document.querySelectorAll("#ranges button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.r === state.range)));
@@ -660,6 +770,12 @@ async function load() {
     renderSetup();
     return;
   }
+  if (state.view === "phone") {
+    if (!META) setMeta(await api("/api/meta"));
+    history.replaceState(null, "", "#phone");
+    renderPhone();
+    return;
+  }
   document.getElementById("app").classList.add("loading");
   let q, live;
   if (state.view === "calendar") {
@@ -677,8 +793,8 @@ async function load() {
     render();
     live = state.range === "today";
   }
-  try { localStorage.setItem("tt-dash", JSON.stringify(state)); } catch (e) {}
-  history.replaceState(null, "", "#" + q.toString());
+  lastQuery = q.toString();
+  saveState();
   if (live) timer = setTimeout(load, 5 * 60 * 1000);
 }
 function setDay(dateStr) {
@@ -710,9 +826,10 @@ const shift = n => {
 document.getElementById("prev").addEventListener("click", () => shift(-1));
 document.getElementById("next").addEventListener("click", () => shift(1));
 document.getElementById("setupBtn").addEventListener("click", () => { state.view = "setup"; wiz.step = 0; load(); });
+document.getElementById("phoneBtn").addEventListener("click", () => { state.view = "phone"; load(); });
 document.querySelectorAll("#langs button").forEach(b => b.addEventListener("click", async () => {
   if (b.dataset.l === LANG) return;
-  try { await post("settings", { lang: b.dataset.l }); } catch (e) { /* still switch locally */ }
+  if (!window.TT_READONLY) try { await post("settings", { lang: b.dataset.l }); } catch (e) { /* still switch locally */ }
   LANG = b.dataset.l; if (META) META.lang = LANG; applyStatic(); syncControls();
   if (state.view === "setup") renderSetup(); else if (state.view === "calendar") { calScrolledWeek = null; load(); } else load();
 }));
@@ -720,12 +837,14 @@ let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTime
 
 (async function boot() {
   try { Object.assign(state, JSON.parse(localStorage.getItem("tt-dash") || "{}")); } catch (e) {}
-  if (state.view === "setup") state.view = "overview";
+  if (state.view === "setup" || state.view === "phone") state.view = "overview";
   try { setMeta(await api("/api/meta")); } catch (e) { /* load() will show the error */ }
   LANG = META ? META.lang : (navigator.language || "en").startsWith("zh") ? "zh" : "en";
   applyStatic();
   const hp = new URLSearchParams(location.hash.slice(1));
-  if (location.hash.startsWith("#setup") || (META && !META.setup_done && !location.hash)) {
+  const rw = !window.TT_READONLY;  // a phone link gets the overview and calendar only
+  if (rw && location.hash.startsWith("#phone")) state.view = "phone";
+  else if (rw && (location.hash.startsWith("#setup") || (META && !META.setup_done && !location.hash))) {
     state.view = "setup";
     const n = parseInt(location.hash.split("/")[1], 10);  // #setup/4 opens step 4
     if (n >= 1 && n <= STEPS.length) wiz.step = n - 1;
@@ -733,6 +852,7 @@ let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTime
   else if (hp.get("view") === "calendar") { state.view = "calendar"; state.calDate = hp.get("date"); if (hp.get("slot")) state.slot = hp.get("slot"); }
   else if (hp.get("range")) { state.view = "overview"; state.range = hp.get("range"); state.date = hp.get("date"); }
   if (hp.get("device")) state.device = hp.get("device");
+  if (hp.get("heat")) state.heat = hp.get("heat");
   if (state.range === "day" && !state.date) state.range = "today";
   load();
 })();

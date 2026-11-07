@@ -165,3 +165,72 @@ def test_tag_by_suggest_id_fills_item_and_scope(tt, monkeypatch):
     assert C.classify_mac("Safari", "my-repo pull request")["project"] != "my-repo"   # scoped to dev apps
     with pytest.raises(ValueError):
         O.apply_tags([{"id": "mac_context:nope", "domain": "工作", "evaluation": "创造"}])
+
+
+@pytest.fixture()
+def srv(tt, monkeypatch):
+    import timetrace.lan as lan
+    import timetrace.intervals as I
+    import timetrace.dashboard.server as server
+    importlib.reload(lan)
+    importlib.reload(server)
+    monkeypatch.setattr(lan, "hostname", lambda: "test-mac.local")
+    monkeypatch.setattr(lan, "lan_ips", lambda: ["192.168.1.25"])
+    return {"lan": lan, "server": server, "I": I, **tt}
+
+
+def handler(server, ip, host="127.0.0.1:27181", cookie=None):
+    h = server.Handler.__new__(server.Handler)
+    h.client_address = (ip, 50000)
+    h.headers = {"Host": host, **({"Cookie": cookie} if cookie else {})}
+    return h
+
+
+def test_phone_access_is_read_only_and_needs_the_token(srv):
+    lan, server = srv["lan"], srv["server"]
+    assert handler(server, "127.0.0.1").access({}) == "rw"
+    assert handler(server, "127.0.0.1", host="evil.example:27181").access({}) is None  # DNS rebinding
+    assert handler(server, "192.168.1.30", host="192.168.1.25:27181").access({"t": "x"}) is None  # off by default
+    lan.enable()
+    tok = srv["settings"].load()["lan_token"]
+    phone = handler(server, "192.168.1.30", host="test-mac.local:27181")
+    assert phone.access({"t": tok}) == "ro"
+    assert phone.access({"t": tok + "x"}) is None
+    assert handler(server, "192.168.1.30", host="test-mac.local:27181", cookie=f"{server.COOKIE}={tok}").access({}) == "ro"
+    assert "/api/setup/candidates" not in server.READ_ONLY_ROUTES and "/api/data" in server.READ_ONLY_ROUTES
+    lan.rotate()
+    assert phone.access({"t": tok}) is None  # old links stop working
+    lan.disable()
+    assert phone.access({"t": srv["settings"].load()["lan_token"]}) is None
+
+
+def test_lan_links_put_the_stable_name_first(srv):
+    lan = srv["lan"]
+    assert lan.urls() == []
+    lan.enable()
+    tok = srv["settings"].load()["lan_token"]
+    assert lan.urls("2026-11-07") == [f"http://test-mac.local:27181/?t={tok}#range=day&date=2026-11-07",
+                                      f"http://192.168.1.25:27181/?t={tok}#range=day&date=2026-11-07"]
+
+
+def test_heat_cells_add_up_to_the_daily_totals(srv, monkeypatch):
+    server, I = srv["server"], srv["I"]
+    now = dt.datetime.now(I.LOCAL).replace(minute=0, second=0, microsecond=0)
+    y = now - dt.timedelta(days=1)
+
+    def r(start, minutes, ev, active=None):
+        return {"start": start, "end": start + dt.timedelta(minutes=minutes), "seconds": (active or minutes) * 60, "evaluation": ev,
+                "kind": "Mac", "device": "Mac", "context": "", "domain": "休闲", "subdomain": "视频", "project": "", "app": "Video"}
+    rows = [r(y.replace(hour=22, minute=30), 90, "消遣"), r(y.replace(hour=9), 60, "创造", active=30)]
+    monkeypatch.setattr(I, "fetch_intervals", lambda *a, **k: rows)
+    d = server.build({"range": "7d"})
+    h = d["heat"]
+    assert len(h["days"]) == 7
+    li = h["evals"].index("消遣")
+    yd = next(x for x in h["days"] if x["date"] == y.date().isoformat())
+    assert yd["h"][22][li] == 1800 and yd["h"][23][li] == 3600       # 22:30–24:00
+    assert yd["h"][9][h["evals"].index("创造")] == 1800              # active share of a 60-min span
+    for day in h["days"]:
+        daily = next(x for x in d["daily"] if x["date"] == day["date"])
+        assert sum(map(sum, day["h"])) == pytest.approx(sum(daily["evals"].values()), abs=2)
+    assert server.build({"range": "today"})["heat"] is None
