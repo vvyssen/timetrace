@@ -1,0 +1,12 @@
+name: test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv venv --python 3.12 && uv pip install -e ".[test]"
+      - run: .venv/bin/python -m pytest -q
+      - run: bash -n install.sh
+      - run: node -e "new Function(require('fs').readFileSync('src/timetrace/dashboard/static/app.js','utf8'))"

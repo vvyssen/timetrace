@@ -1,0 +1,222 @@
+# timetrace built-in rule library.
+#
+# Every label is a key; `labels` gives its display text per language. `timetrace` turns this into
+# the user's own config (labels in their language) on first run — after that the user's config is
+# the single source of truth and this file is only a starting point.
+#
+# Bundle ids are best-effort; anything wrong or missing shows up in the setup wizard for tagging.
+
+labels:
+  domains:
+    work: {zh: 工作, en: Work}
+    study: {zh: 学习, en: Study}
+    life: {zh: 生活, en: Life}
+    social: {zh: 社交, en: Social}
+    leisure: {zh: 休闲, en: Leisure}
+    transport: {zh: 交通, en: Transport}
+    uncategorized: {zh: 未分类, en: Uncategorized}
+  subdomains:
+    dev: {zh: 开发, en: Development}
+    writing: {zh: 文档写作, en: Writing}
+    meetings: {zh: 协作与会议, en: Meetings & collaboration}
+    design: {zh: 设计, en: Design}
+    research: {zh: 科研, en: Research}
+    reading: {zh: 课程与阅读, en: Courses & reading}
+    personal: {zh: 个人项目, en: Personal projects}
+    health: {zh: 健康, en: Health}
+    errands: {zh: 生活事务, en: Errands & admin}
+    shopping: {zh: 购物, en: Shopping}
+    food: {zh: 餐饮, en: Food}
+    travel: {zh: 旅行, en: Travel}
+    messaging: {zh: 即时通讯, en: Messaging}
+    calls: {zh: 通话, en: Calls}
+    feeds: {zh: 内容信息流, en: Feeds & video}
+    games: {zh: 游戏, en: Games}
+    music: {zh: 音乐, en: Music}
+    hobbies: {zh: 爱好, en: Hobbies}
+  evaluations:
+    create:
+      zh: [创造, 短期就有价值——产出作品、决策或交付物]
+      en: [Create, Valuable right away — producing work, decisions or deliverables]
+    grow:
+      zh: [提升, 短期价值少、长期价值高——投资能力、知识、健康或关系]
+      en: [Grow, Little value now, a lot later — investing in skills, knowledge, health or relationships]
+    keep:
+      zh: [保值, 不做会扣除价值——维持生活和系统正常运转的必要事务]
+      en: [Maintain, Costs you if skipped — the errands that keep life and tools running]
+    leisure:
+      zh: [消遣, 短期扣除价值——放松、娱乐、信息流]
+      en: [Unwind, Costs value in the short term — rest, entertainment, feeds]
+  projects:
+    browsing: {zh: 网页浏览, en: Web browsing}
+    terminal: {zh: 终端, en: Terminal}
+    unknown_agent: {zh: AI 编码（未识别项目）, en: AI coding (project unknown)}
+    system: {zh: 系统维护, en: System upkeep}
+    files: {zh: 文件管理, en: Files}
+    passwords: {zh: 密码管理, en: Passwords}
+    mail: {zh: 邮件, en: Mail}
+
+taxonomy:
+  work: [dev, writing, meetings, design]
+  study: [research, reading]
+  life: [personal, health, errands, shopping, food, travel]
+  social: [messaging, calls]
+  leisure: [feeds, games, music, hobbies]
+  transport: []
+  uncategorized: []
+
+# A single sitting longer than the threshold turns into `evaluation`; shorter ones keep the base value.
+duration_rules:
+  session_gap_seconds: 300
+  rules:
+    - {name: long-browse-shopping, subdomains: [shopping, food, travel], over_minutes: 45, evaluation: leisure}
+    - {name: long-chat, subdomains: [messaging], over_minutes: 20, evaluation: leisure}
+
+# iPhone / iPad apps by bundle id: [domain, subdomain, evaluation, zh name, en name]
+ios_apps:
+  com.tencent.xin: [social, messaging, keep, 微信, WeChat]
+  com.tencent.mqq: [social, messaging, keep, QQ, QQ]
+  ph.telegra.Telegraph: [social, messaging, keep, Telegram, Telegram]
+  net.whatsapp.WhatsApp: [social, messaging, keep, WhatsApp, WhatsApp]
+  com.apple.MobileSMS: [social, messaging, keep, 信息, Messages]
+  com.facebook.Messenger: [social, messaging, keep, Messenger, Messenger]
+  com.hammerandchisel.discord: [social, messaging, keep, Discord, Discord]
+  com.apple.mobilephone: [social, calls, keep, 电话, Phone]
+  com.apple.InCallService: [social, calls, keep, 通话, Calls]
+  com.apple.facetime: [social, calls, keep, FaceTime, FaceTime]
+  com.xingin.discover: [leisure, feeds, leisure, 小红书, Xiaohongshu]
+  com.ss.iphone.ugc.Aweme: [leisure, feeds, leisure, 抖音, Douyin]
+  com.zhiliaoapp.musically: [leisure, feeds, leisure, TikTok, TikTok]
+  tv.danmaku.bilianime: [leisure, feeds, leisure, 哔哩哔哩, Bilibili]
+  com.google.ios.youtube: [leisure, feeds, leisure, YouTube, YouTube]
+  com.sina.weibo: [leisure, feeds, leisure, 微博, Weibo]
+  com.zhihu.ios: [leisure, feeds, leisure, 知乎, Zhihu]
+  com.douban.frodo: [leisure, feeds, leisure, 豆瓣, Douban]
+  com.burbn.instagram: [leisure, feeds, leisure, Instagram, Instagram]
+  com.facebook.Facebook: [leisure, feeds, leisure, Facebook, Facebook]
+  com.atebits.Tweetie2: [leisure, feeds, leisure, X, X]
+  com.reddit.Reddit: [leisure, feeds, leisure, Reddit, Reddit]
+  com.netflix.Netflix: [leisure, feeds, leisure, Netflix, Netflix]
+  com.qiyi.iphone: [leisure, feeds, leisure, 爱奇艺, iQIYI]
+  com.tencent.live4iphone: [leisure, feeds, leisure, 腾讯视频, Tencent Video]
+  com.youku.YouKu: [leisure, feeds, leisure, 优酷, Youku]
+  com.apple.mobilesafari: [leisure, feeds, leisure, Safari, Safari]
+  com.google.chrome.ios: [leisure, feeds, leisure, Chrome, Chrome]
+  com.microsoft.msedge: [leisure, feeds, leisure, Edge, Edge]
+  com.apple.mobileslideshow: [leisure, hobbies, leisure, 照片, Photos]
+  com.apple.camera: [leisure, hobbies, leisure, 相机, Camera]
+  com.apple.AppStore: [leisure, feeds, leisure, App Store, App Store]
+  com.apple.Music: [leisure, music, leisure, 音乐, Music]
+  com.spotify.client: [leisure, music, leisure, Spotify, Spotify]
+  com.tencent.QQMusic: [leisure, music, leisure, QQ音乐, QQ Music]
+  com.netease.cloudmusic: [leisure, music, leisure, 网易云音乐, NetEase Music]
+  com.valvesoftware.Steam: [leisure, games, leisure, Steam, Steam]
+  com.tencent.smoba: [leisure, games, leisure, 王者荣耀, Honor of Kings]
+  com.miHoYo.GenshinImpact: [leisure, games, leisure, 原神, Genshin Impact]
+  com.taobao.taobao4iphone: [life, shopping, keep, 淘宝, Taobao]
+  com.360buy.jdmobile: [life, shopping, keep, 京东, JD]
+  com.xunmeng.pinduoduo: [life, shopping, keep, 拼多多, Pinduoduo]
+  com.taobao.fleamarket: [life, shopping, keep, 闲鱼, Xianyu]
+  com.siwuai.duapp: [life, shopping, keep, 得物, Dewu]
+  com.amazon.Amazon: [life, shopping, keep, Amazon, Amazon]
+  com.apple.store.Jolly: [life, shopping, keep, Apple Store, Apple Store]
+  com.cainiao.cnwireless: [life, shopping, keep, 菜鸟, Cainiao]
+  com.meituan.itakeaway: [life, food, keep, 美团外卖, Meituan Delivery]
+  com.meituan.imeituan: [life, food, keep, 美团, Meituan]
+  com.dianping.dpscope: [life, food, keep, 大众点评, Dianping]
+  com.ubercab.UberEats: [life, food, keep, Uber Eats, Uber Eats]
+  ctrip.com: [life, travel, keep, 携程, Trip.com]
+  com.taobao.travel: [life, travel, keep, 飞猪, Fliggy]
+  com.airbnb.app: [life, travel, keep, Airbnb, Airbnb]
+  com.travelsky.umetrip: [transport, "", keep, 航旅纵横, Umetrip]
+  com.xiaojukeji.didi: [transport, "", keep, 滴滴, DiDi]
+  com.autonavi.amap: [transport, "", keep, 高德地图, Amap]
+  com.tencent.sosomap: [transport, "", keep, 腾讯地图, Tencent Maps]
+  com.google.Maps: [transport, "", keep, Google 地图, Google Maps]
+  com.apple.Maps: [transport, "", keep, 地图, Maps]
+  com.ubercab.UberClient: [transport, "", keep, Uber, Uber]
+  com.alipay.iphoneclient: [life, errands, keep, 支付宝, Alipay]
+  com.apple.Passbook: [life, errands, keep, 钱包, Wallet]
+  com.apple.mobilemail: [life, errands, keep, 邮件, Mail]
+  com.apple.mobilecal: [life, errands, keep, 日历, Calendar]
+  com.apple.weather: [life, errands, keep, 天气, Weather]
+  com.apple.mobiletimer: [life, errands, keep, 时钟, Clock]
+  com.apple.ClockAngel: [life, errands, keep, 时钟, Clock]
+  com.apple.calculator: [life, errands, keep, 计算器, Calculator]
+  com.apple.findmy: [life, errands, keep, 查找, Find My]
+  com.apple.Preferences: [life, errands, keep, 设置, Settings]
+  com.apple.Passwords: [life, errands, keep, 密码, Passwords]
+  com.1password.1password: [life, errands, keep, 1Password, 1Password]
+  com.microsoft.azureauthenticator: [life, errands, keep, Authenticator, Authenticator]
+  com.apple.VoiceMemos: [life, errands, keep, 语音备忘录, Voice Memos]
+  com.apple.mobilenotes: [work, writing, create, 备忘录, Notes]
+  com.apple.reminders: [life, errands, keep, 提醒事项, Reminders]
+  com.apple.Health: [life, health, grow, 健康, Health]
+  com.apple.Fitness: [life, health, grow, 健身, Fitness]
+  com.apple.iBooks: [study, reading, grow, 图书, Books]
+  com.amazon.Lassen: [study, reading, grow, Kindle, Kindle]
+  com.duolingo.DuolingoMobile: [study, reading, grow, 多邻国, Duolingo]
+  com.openai.chat: [study, reading, grow, ChatGPT, ChatGPT]
+  com.anthropic.claude: [study, reading, grow, Claude, Claude]
+  com.bytedance.ee.lark: [work, meetings, create, 飞书, Lark]
+  com.laiwang.DingTalk: [work, meetings, create, 钉钉, DingTalk]
+  com.tencent.meeting: [work, meetings, create, 腾讯会议, Tencent Meeting]
+  us.zoom.videomeetings: [work, meetings, create, Zoom, Zoom]
+  com.tinyspeck.chatlyio: [work, meetings, create, Slack, Slack]
+  com.microsoft.skype.teams: [work, meetings, create, Teams, Teams]
+  notion.id: [work, writing, create, Notion, Notion]
+
+# iOS system surfaces that are not real usage.
+ignore_bundles:
+  - com.apple.SleepLockScreen
+  - com.apple.control-center
+  - com.apple.CTNotifyUIService
+  - com.apple.springboard.today-view
+  - com.apple.springboard.home-screen-open-folder
+  - com.apple.springboard.home-screen-open-f
+  - com.apple.springboard.app-library-open-pod
+  - com.apple.springboard.stand-by
+  - com.apple.ScreenshotServicesService
+  - com.apple.LocalAuthenticationUIService
+  - com.apple.AuthenticationServicesUI
+  - com.apple.AuthKitUIService
+  - com.apple.FCAuthenticationUI
+  - com.apple.MediaRemoteUIService
+  - com.apple.PosterBoard
+  - com.apple.PassbookUIService
+  - com.apple.HeadphoneProxService
+  - com.apple.ClipViewService
+  - com.tencent.wetype
+
+# Mac apps that are system chrome, not usage.
+ignore_apps: [loginwindow, SecurityAgent, UserNotificationCenter, CoreServicesUIAgent, coreautha, ScreenSaverEngine, "?"]
+
+# Mac rules, first match wins. Title rules come first, app-level fallbacks after them.
+# apps: app names as macOS reports them; "*" = any app. title_re: case-insensitive regex; "." = any title.
+mac_rules:
+  - {name: site-video, apps: ["*"], title_re: "YouTube|哔哩哔哩|bilibili|Netflix|爱奇艺|优酷|腾讯视频|Twitch", domain: leisure, subdomain: feeds, evaluation: leisure}
+  - {name: site-social, apps: ["*"], title_re: "X 上的| / X$|Twitter|Reddit|Instagram|Facebook|小红书|微博|知乎|豆瓣", domain: leisure, subdomain: feeds, evaluation: leisure}
+  - {name: site-dev, apps: ["*"], title_re: "GitHub|GitLab|Stack Overflow", domain: work, subdomain: dev, evaluation: create}
+  - {name: site-docs, apps: ["*"], title_re: "Google Docs|Google 文档|Overleaf|Notion", domain: work, subdomain: writing, evaluation: create}
+  - {name: site-mail, apps: ["*"], title_re: "Gmail|Outlook", domain: life, subdomain: errands, project: mail, evaluation: keep}
+  - {name: site-shopping, apps: ["*"], title_re: "淘宝|天猫|京东|Amazon\\.|拼多多", domain: life, subdomain: shopping, evaluation: keep}
+  - {name: shell-idle, apps: [Terminal, iTerm2, Ghostty, Warp, Alacritty, kitty, WezTerm], title_re: "^(?:(?:zsh|bash|fish|sh)\\b|~$|/bin/)", domain: life, subdomain: personal, project: terminal, evaluation: keep}
+  - {name: terminal-opencode-generic, apps: [Terminal, iTerm2, Ghostty, Warp, Alacritty, kitty, WezTerm], title_re: "^(OpenCode|opencode)$", domain: life, subdomain: personal, project: unknown_agent, evaluation: create}
+  - {name: browsers, apps: [Safari, Google Chrome, Arc, Firefox, Microsoft Edge, Dia, Brave Browser, Opera, Vivaldi, Orion, Zen], title_re: ".", domain: leisure, subdomain: feeds, project: browsing, evaluation: leisure}
+  - {name: code-editors, apps: [Code, Visual Studio Code, Cursor, Windsurf, Zed, Xcode, PyCharm, IntelliJ IDEA, WebStorm, GoLand, Sublime Text, Nova, BBEdit], title_re: ".", domain: work, subdomain: dev, evaluation: create}
+  - {name: ai-apps, apps: [ChatGPT, Claude, Codex, DeepSeek, Kimi, 豆包], title_re: ".", domain: work, subdomain: dev, evaluation: create}
+  - {name: messaging, apps: [WeChat, 微信, Weixin, QQ, Telegram, WhatsApp, Messages, 信息, Discord, Signal, LINE], title_re: ".", domain: social, subdomain: messaging, evaluation: keep}
+  - {name: work-chat, apps: [Slack, Lark, Feishu, 飞书, DingTalk, 钉钉, Microsoft Teams], title_re: ".", domain: work, subdomain: meetings, evaluation: create}
+  - {name: meetings, apps: [zoom.us, 腾讯会议, TencentMeeting, Webex, Google Meet], title_re: ".", domain: work, subdomain: meetings, evaluation: create}
+  - {name: calls, apps: [FaceTime], title_re: ".", domain: social, subdomain: calls, evaluation: keep}
+  - {name: mail-apps, apps: [Mail, Microsoft Outlook, Spark, Airmail, Mimestream], title_re: ".", domain: life, subdomain: errands, project: mail, evaluation: keep}
+  - {name: writing-apps, apps: [Pages, Microsoft Word, Notion, Obsidian, Typora, Bear, Craft, Ulysses, iA Writer, Texifier, TeXShop, TextEdit, Notes, 备忘录, Microsoft PowerPoint, Keynote, Microsoft Excel, Numbers], title_re: ".", domain: work, subdomain: writing, evaluation: create}
+  - {name: design-apps, apps: [Figma, Sketch, Adobe Photoshop, Adobe Illustrator, Affinity Designer, Affinity Photo, Pixelmator Pro, Blender], title_re: ".", domain: work, subdomain: design, evaluation: create}
+  - {name: reading-apps, apps: [Preview, PDF Expert, Zotero, Books, Kindle, MarginNote 4, Skim, Readwise Reader, Wolfram, Mathematica], title_re: ".", domain: study, subdomain: reading, evaluation: grow}
+  - {name: music-apps, apps: [Music, Spotify, QQ音乐, 网易云音乐, NeteaseMusic], title_re: ".", domain: leisure, subdomain: music, evaluation: leisure}
+  - {name: video-apps, apps: [IINA, VLC, Infuse, TV, Netflix, 哔哩哔哩], title_re: ".", domain: leisure, subdomain: feeds, evaluation: leisure}
+  - {name: game-apps, apps: [Steam, Epic Games Launcher, Battle.net, Minecraft, 明日方舟, 原神], title_re: ".", domain: leisure, subdomain: games, evaluation: leisure}
+  - {name: passwords, apps: [1Password, 1Password 7, Passwords, Keychain Access, 钥匙串访问, Bitwarden], title_re: ".", domain: life, subdomain: errands, project: passwords, evaluation: keep}
+  - {name: system, apps: [System Settings, System Preferences, Activity Monitor, App Store, Disk Utility, Console], title_re: ".", domain: life, subdomain: errands, project: system, evaluation: keep}
+  - {name: finder, apps: [Finder], title_re: ".", domain: life, subdomain: errands, project: files, evaluation: keep}
+  - {name: terminal-fallback, apps: [Terminal, iTerm2, Ghostty, Warp, Alacritty, kitty, WezTerm], title_re: ".", domain: work, subdomain: dev, project: terminal, evaluation: create}
