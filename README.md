@@ -75,6 +75,7 @@ Open it from Spotlight (**Timetrace**, or **时间看板** in Chinese) or with `
 - **Overview** — totals by evaluation, per device, per day, per hour, domains and top projects; today / yesterday / 7 / 30 days or any day.
 - **Hours of the week** — in the 7- and 30-day views, a heatmap of hour × day (30 days: averaged by weekday). Filter by evaluation — e.g. *Unwind* — to see when that time happens, with a one-line summary of the peak hours and the late-night share.
 - **Calendar** — a week view with one lane per device: each block is the main project of that stretch, colored by its evaluation.
+- **Settings** — appearance (match system / light / dark), language, duration rules, phone access and agents; reopen the setup wizard or reset your category rules to the defaults (backed up first).
 - Chinese and English, light and dark, colorblind-checked palette, laid out for phones too.
 
 ### On your phone

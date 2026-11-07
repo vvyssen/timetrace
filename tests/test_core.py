@@ -273,3 +273,13 @@ def test_detailed_view_splits_devices_of_one_kind(srv, monkeypatch):
     assert sum(detailed["by_device"]["iPhone:Work iPhone"].values()) == pytest.approx(600)
     cal = server.build_calendar({"split": "1"})
     assert cal["lanes"] == ["Mac", "iPhone:Wissen's iPhone", "iPhone:Work iPhone"]
+
+
+def test_reset_rules_backs_up_then_restores_defaults(srv):
+    server, config, O = srv["server"], srv["config"], srv["O"]
+    O.apply_tags([{"kind": "mac_app", "app": "Some Editor", "domain": "工作", "subdomain": "新子领域", "evaluation": "创造"}])
+    assert "新子领域" in config.get()["domains"]["工作"]
+    res = server.action("reset-rules", {})
+    assert res["backup"] and "新子领域" in open(res["backup"], encoding="utf-8").read()
+    config._cache.update(mtime=None, cfg=None)
+    assert "新子领域" not in config.get()["domains"]["工作"]

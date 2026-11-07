@@ -314,6 +314,10 @@ def action(name, body):
             lan.rotate()
         rebind()
         return lan.status()
+    elif name == "reset-rules":  # settings page: back up config.yaml, then rebuild it from the built-in library
+        dst = config.backup()
+        config.init(lang=config.get().get("lang") or settings.load()["lang"], force=True)
+        return {"ok": True, "backup": str(dst) if dst else None}
     elif name == "reset-labels":  # regenerate rule labels in the chosen language (only offered before any tagging)
         config.init(lang=body.get("lang") or settings.load()["lang"], force=True)
     else:
@@ -392,7 +396,8 @@ class Handler(SimpleHTTPRequestHandler):
                   "/api/setup/first-look": lambda: onboarding.first_look(int(params.get("days", 14))),
                   "/api/setup/candidates": lambda: onboarding.candidates(int(params.get("days", 14))),
                   "/api/setup/pending": lambda: cached("pending", {}, lambda p: onboarding.pending()),
-                  "/api/setup/agent": agent_info, "/api/lan": lambda: {**lan.status(), "listening": bool(_server["httpd"]) and _server["httpd"].server_address[0] != "127.0.0.1"}}
+                  "/api/setup/agent": agent_info,
+                  "/api/about": lambda: {"version": __version__, "config": str(paths.CONFIG), "backups": str(paths.BACKUPS)}, "/api/lan": lambda: {**lan.status(), "listening": bool(_server["httpd"]) and _server["httpd"].server_address[0] != "127.0.0.1"}}
         if u.path in routes:
             try:
                 return self._json(routes[u.path]())

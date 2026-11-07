@@ -3,6 +3,18 @@
 let META = null, LANG = "zh", EVALS = [], ROLE = {}, data = null, cal = null, timer = null;
 const ROLE_ORDER = ["create", "grow", "keep", "leisure"];
 
+// ---------- theme: follow the system, or force light / dark (remembered per browser) ----------
+const THEMES = ["system", "light", "dark"];
+const THEME_ICONS = Object.fromEntries([...document.querySelectorAll("#themes button")].map(b => [b.dataset.m, b.innerHTML]));
+function getTheme() { try { const m = localStorage.getItem("tt-theme"); return THEMES.includes(m) ? m : "system"; } catch (e) { return "system"; } }
+function setTheme(m) {
+  try { if (m === "system") localStorage.removeItem("tt-theme"); else localStorage.setItem("tt-theme", m); } catch (e) {}
+  if (m === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = m;
+  syncTheme();
+}
+function syncTheme() { const m = getTheme(); document.querySelectorAll("button[data-m]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.m === m))); }
+function themeIcon(m) { const s = el("span", { "aria-hidden": "true" }); s.innerHTML = THEME_ICONS[m] || ""; return s; }
+
 // ---------- i18n ----------
 function t(key, vars = {}) {
   const dict = I18N[LANG] || I18N.en;
@@ -19,6 +31,9 @@ function applyStatic() {
   document.getElementById("date").setAttribute("aria-label", t("pickDay"));
   document.getElementById("device").setAttribute("aria-label", t("device"));
   document.getElementById("split").setAttribute("aria-label", t("splitLabel"));
+  document.getElementById("themes").setAttribute("aria-label", t("theme"));
+  document.querySelectorAll("#themes button").forEach(b => { b.title = t("theme_" + b.dataset.m); b.setAttribute("aria-label", b.title); });
+  syncTheme();
   const slot = document.getElementById("slot");
   slot.setAttribute("aria-label", t("slot"));
   [...slot.options].forEach(o => { o.textContent = o.value === "60" ? t("slot60") : t("slotN", { n: o.value }); });
@@ -303,7 +318,16 @@ function richT(key, vars) {  // t() with the filled-in values in bold
   return s.split(/(\{\w+\})/).filter(Boolean).map(part => { const m = part.match(/^\{(\w+)\}$/); return m ? el("b", { text: vars[m[1]] ?? "" }) : part; });
 }
 const clock = h => h === 24 ? "24:00" : `${String(h % 24).padStart(2, "0")}:00`;
-const HEAT_OPACITY = v => 0.15 + 0.85 * Math.pow(v, 0.7);  // one hue, light -> dark; empty cells stay blank
+const HEAT_T = v => 0.15 + 0.85 * Math.pow(v, 0.7);  // 0..1 share of the max -> position on the ramp
+// One hue per ramp, keeping hue and most of its chroma: light mode runs pale tint -> full color, dark mode deep
+// shade -> full color (CSS vars --heat-l0 / --heat-c0). Mixing toward the grey surface instead turns yellow olive.
+const RELATIVE_COLOR = !!(window.CSS && CSS.supports && CSS.supports("color", "oklch(from red l c h)"));
+function heatColor(color, v) {
+  const f = HEAT_T(v).toFixed(3);
+  return RELATIVE_COLOR ? `oklch(from ${color} calc(var(--heat-l0) + (l - var(--heat-l0)) * ${f}) calc(c * (var(--heat-c0) + (1 - var(--heat-c0)) * ${f})) h)` : null;
+}
+const heatAttrs = (color, v) => { const c = heatColor(color, v); return c ? { style: `fill:${c}` } : { fill: color, "fill-opacity": HEAT_T(v).toFixed(3) }; };
+const heatSwatch = (color, v) => { const c = heatColor(color, v); return c ? `background:${c}` : `background:${color};opacity:${HEAT_T(v).toFixed(3)}`; };
 function renderHeat() {
   const c = document.getElementById("c-heat");
   const H = data.heat;
@@ -345,17 +369,30 @@ function renderHeat() {
   const padL = Math.ceil(Math.max(...rows.map(r => textWidth(r.label)))) + (narrow ? 6 : 10);
   const padT = 16, gap = 2, cw = (W - padL) / 24, ch = narrow ? Math.max(15, cw * 1.25) : Math.max(18, Math.min(30, cw * 0.95));
   const max = Math.max(...rows.flatMap(r => r.h.map(cellVal)), 1);
-  const top = hr => { let bi = -1, bv = 0; hr.forEach((v, k) => { if (v > bv) { bv = v; bi = k; } }); return bi < 0 ? null : H.evals[bi]; };
-  const fillOf = hr => sel ? col(sel) : col(top(hr));  // "all": the evaluation with the most time that hour
   const svg = sv("svg", { width: W, height: padT + rows.length * ch, role: "img", "aria-label": `${title}. ${c.querySelector(".heat-sum").textContent}` });
+  const defs = sv("defs"); svg.append(defs);
   for (let h = 0; h < 24; h += narrow ? 6 : 3) { const lab = sv("text", { x: padL + h * cw + 1, y: 10 }); lab.textContent = String(h).padStart(2, "0"); svg.append(lab); }
   rows.forEach((r, i) => {
     const y = padT + i * ch;
     const lab = sv("text", { x: 0, y: y + ch / 2 + 4 }); lab.textContent = r.label; lab.style.fill = "var(--ink-2)"; svg.append(lab);
     r.h.forEach((hr, h) => {
       const v = cellVal(hr), x = padL + h * cw, g = sv("g", { class: "heat-cell" });
-      g.append(sv("rect", { x: x + gap / 2, y: y + gap / 2, width: cw - gap, height: ch - gap, rx: 3, fill: "var(--wash)" }));
-      if (v > 0) g.append(sv("rect", { x: x + gap / 2, y: y + gap / 2, width: cw - gap, height: ch - gap, rx: 3, fill: fillOf(hr), "fill-opacity": HEAT_OPACITY(v / max).toFixed(3) }));
+      const x0 = x + gap / 2, y0 = y + gap / 2, w = cw - gap, hh = ch - gap;
+      if (v <= 0) g.append(sv("rect", { x: x0, y: y0, width: w, height: hh, rx: 3, fill: "var(--wash)" }));
+      else if (sel) g.append(sv("rect", { x: x0, y: y0, width: w, height: hh, rx: 3, ...heatAttrs(col(sel), v / max) }));
+      else {  // "all": the cell is cut vertically into one stripe per evaluation, as wide as its share of the hour
+        const id = `hc-${i}-${h}`, clip = sv("clipPath", { id });
+        clip.append(sv("rect", { x: x0, y: y0, width: w, height: hh, rx: 3 })); defs.append(clip);
+        const stripes = sv("g", { "clip-path": `url(#${id})` });
+        let xx = x0;
+        H.evals.forEach((e, k) => {
+          if (!(hr[k] > 0)) return;
+          const sw = hr[k] / v * w;
+          stripes.append(sv("rect", { x: xx, y: y0, width: sw + 0.4, height: hh, ...heatAttrs(col(e), v / max) }));  // +0.4: no hairline seams
+          xx += sw;
+        });
+        g.append(stripes);
+      }
       const when = `${r.title} · ${clock(h)}–${clock(h + 1)}${byWd ? t("heatAvg") : ""}`;
       hover(g, ev => showTip(ev, when, sel ? [[sel, fmt(v), col(sel)]] : evalRows(Object.fromEntries(H.evals.map((e, k) => [e, hr[k]])), v)));
       svg.append(g);
@@ -365,7 +402,7 @@ function renderHeat() {
   const ramp = el("div", { class: "ramp" });
   if (sel) {
     ramp.append(t("heatLess"));
-    [0, 0.25, 0.5, 0.75, 1].forEach(f => ramp.append(el("i", { style: `background:${col(sel)};opacity:${HEAT_OPACITY(f).toFixed(3)}` })));
+    [0, 0.25, 0.5, 0.75, 1].forEach(f => ramp.append(el("i", { style: heatSwatch(col(sel), f) })));
     ramp.append(t("heatMore"), " · ", t("heatMax", { v: fmt(max) }));
   } else {
     ramp.append(el("span", { text: t("heatAllLegend", { v: fmt(max) }) }));
@@ -461,16 +498,20 @@ function renderTable() {
 
 // ---------- phone access (read-only link on the local network) ----------
 async function renderPhone() {
-  hideCards([...OVERVIEW_CARDS, "c-calendar", "c-setup", "c-pending"]);
-  const c = card("c-phone", t("phoneTitle"), null);
-  c.append(el("p", { class: "note", style: "max-width:820px;font-size:13px", text: t("phoneLead") }));
+  hideCards([...OVERVIEW_CARDS, "c-calendar", "c-setup", "c-pending", "c-settings"]);
+  const card_ = card("c-phone", t("phoneTitle"), null), c = el("div");
+  card_.append(c, el("div", { class: "wiz-nav" }, el("button", { class: "btn", type: "button", onclick: () => { state.view = "overview"; load(); } }, t("phoneBack"))));
+  await phoneSection(c);
+}
+async function phoneSection(c) {  // also used on the settings page
+  c.replaceChildren(el("p", { class: "note", style: "max-width:820px;font-size:13px", text: t("phoneLead") }));
   let st;
   try { st = await api("/api/lan"); } catch (e) { c.append(el("div", { class: "err", text: e.message })); return; }
   const toast = el("span", { class: "toast" });
   const act = async body => {
     try { await post("lan", body); } catch (e) { toast.textContent = e.message; toast.className = "toast err"; return; }
     await new Promise(r => setTimeout(r, 800));  // the server is listening again on the new address
-    if (state.view === "phone") renderPhone();
+    if (c.isConnected) phoneSection(c);
   };
   c.append(el("div", { class: "phone-state" },
     el("span", { class: "pill" + (st.enabled ? " on" : "") }, el("i"), st.enabled ? t("phoneOn") : t("phoneOff")),
@@ -485,8 +526,61 @@ async function renderPhone() {
   }
   const tips = el("ul", { class: "tips" }, el("li", { text: t("phoneTipSafari") }), el("li", { text: t("phoneTipHome") }));
   if (st.firewall) tips.append(el("li", { text: t("phoneTipFirewall") }));
-  c.append(el("div", { style: "font-weight:600;margin-top:14px", text: t("phoneTips") }), tips,
-    el("div", { class: "wiz-nav" }, el("button", { class: "btn", type: "button", onclick: () => { state.view = "overview"; load(); } }, t("phoneBack"))));
+  c.append(el("div", { style: "font-weight:600;margin-top:14px", text: t("phoneTips") }), tips);
+}
+
+// ---------- settings ----------
+async function renderSettings() {
+  hideCards([...OVERVIEW_CARDS, "c-calendar", "c-setup", "c-pending", "c-phone"]);
+  const c = card("c-settings", t("settingsTitle"), null);
+  const sec = (title, lead) => { const s = el("div", { class: "set-sec" }, el("h3", { text: title })); if (lead) s.append(el("p", { class: "note", text: lead })); c.append(s); return s; };
+  // appearance
+  const look = sec(t("secAppearance"));
+  const tseg = el("div", { class: "seg", role: "group", "aria-label": t("theme") },
+    ...THEMES.map(m => el("button", { type: "button", "data-m": m, onclick: () => setTheme(m) }, themeIcon(m), " " + t("theme_" + m))));
+  const lseg = el("div", { class: "seg", role: "group", "aria-label": t("language") },
+    ...[["zh", "中文"], ["en", "English"]].map(([l, n]) => el("button", { type: "button", "aria-pressed": String(LANG === l), onclick: () => switchLang(l) }, n)));
+  look.append(el("div", { class: "set-row" }, el("span", { class: "set-k", text: t("theme") }), tseg),
+    el("div", { class: "set-row" }, el("span", { class: "set-k", text: t("language") }), lseg));
+  syncTheme();
+  // categories: wizard, tagging, reset
+  const cat = sec(t("secCategories"), t("catLead"));
+  cat.append(el("div", { class: "set-row" },
+    el("button", { class: "btn", type: "button", onclick: () => { state.view = "setup"; wiz.step = 0; load(); } }, t("openWizard")),
+    el("button", { class: "btn", type: "button", onclick: () => { state.view = "setup"; wiz.step = 3; load(); } }, t("goTag"))));
+  const resetBox = el("div");
+  const resetBtn = el("button", { class: "btn danger", type: "button" }, t("resetRules"));
+  resetBtn.addEventListener("click", () => {  // two steps, inline (no browser dialog)
+    resetBtn.disabled = true;
+    const toast = el("span", { class: "toast" });
+    const go = el("button", { class: "btn danger", type: "button" }, t("resetConfirm"));
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      try {
+        const r = await post("reset-rules");
+        setMeta(await api("/api/meta"));
+        resetBox.replaceChildren(el("div", { class: "confirm", text: t("resetDone", { p: r.backup || "—" }) }));
+      } catch (e) { toast.textContent = e.message; toast.className = "toast err"; go.disabled = false; }
+      resetBtn.disabled = false;
+    });
+    resetBox.replaceChildren(el("div", { class: "confirm" }, el("div", { text: t("resetRulesWarn") }),
+      el("div", { class: "set-row" }, go, el("button", { class: "btn", type: "button", onclick: () => { resetBox.replaceChildren(); resetBtn.disabled = false; } }, t("cancel")), toast)));
+  });
+  cat.append(el("div", { class: "set-row" }, resetBtn, el("span", { class: "note", style: "margin:0", text: t("resetRulesNote") })), resetBox);
+  // duration rules
+  rulesForm(sec(t("rulesTitle"), t("rulesNote")));
+  // phone access
+  const ph = el("div"); sec(t("phoneTitle")).append(ph); phoneSection(ph);
+  // agents
+  sec(t("secAgent")).append(agentBox(null));
+  // about
+  const about = sec(t("secAbout"));
+  api("/api/about").then(a => about.append(el("dl", { class: "about" },
+    el("dt", { text: t("aboutVersion") }), el("dd", { text: a.version }),
+    el("dt", { text: t("aboutConfig") }), el("dd", { text: a.config }),
+    el("dt", { text: t("aboutBackups") }), el("dd", { text: a.backups })))).catch(() => {});
+  c.append(el("div", { class: "wiz-nav" }, el("button", { class: "btn", type: "button", onclick: () => { state.view = "overview"; load(); } }, t("phoneBack"))));
+  document.getElementById("updated").textContent = "";
 }
 
 function rangeLabel() {
@@ -498,7 +592,7 @@ function rangeLabel() {
 }
 
 function render() {
-  hideCards(["c-calendar", "c-setup", "c-phone"]);
+  hideCards(["c-calendar", "c-setup", "c-phone", "c-settings"]);
   renderPending();
   if (data.error) { hideCards(OVERVIEW_CARDS); const c = card("c-summary", t("error")); c.append(el("div", { class: "err", text: data.error })); return; }
   renderSummary(); renderTimeline(); renderDaily(); renderHeat(); renderHourly(); renderDomains(); renderProjects(); renderTable();
@@ -508,7 +602,7 @@ function render() {
 // ---------- calendar ----------
 let calScrolledWeek = null;
 function renderCalendar() {
-  hideCards([...OVERVIEW_CARDS, "c-setup", "c-pending", "c-phone"]);
+  hideCards([...OVERVIEW_CARDS, "c-setup", "c-pending", "c-phone", "c-settings"]);
   if (cal.error) { const c = card("c-calendar", t("error")); c.append(el("div", { class: "err", text: cal.error })); return; }
   const ws = new Date(cal.week.start), we = new Date(new Date(cal.week.end).getTime() - 1);
   const c = card("c-calendar", t("calTitle"), t("calNote", { a: localDate(ws), b: localDate(we), n: cal.slot_minutes }));
@@ -580,7 +674,7 @@ const STEPS = ["stepWelcome", "stepChecks", "stepLook", "stepTag", "stepRules", 
 const wiz = { step: 0, timer: null, edits: {} };
 
 function renderSetup() {
-  hideCards([...OVERVIEW_CARDS, "c-calendar", "c-pending"]);
+  hideCards([...OVERVIEW_CARDS, "c-calendar", "c-pending", "c-phone", "c-settings"]);
   clearInterval(wiz.timer);
   const c = card("c-setup", t("wizard"), null);
   const nav = el("div", { class: "steps" });
@@ -742,8 +836,11 @@ async function stepTag(body) {
 }
 
 function stepRules(body) {
-  const dr = META.duration_rules || {};
   body.append(el("h3", { text: t("rulesTitle") }), el("p", { text: t("rulesNote") }));
+  rulesForm(body);
+}
+function rulesForm(body) {  // wizard step and settings page
+  const dr = META.duration_rules || {};
   const form = el("div", { class: "rules-form" });
   const gap = el("input", { class: "ctl", type: "number", min: "1", max: "60", step: "1", value: String(Math.round((dr.session_gap_seconds || 300) / 60)) });
   form.append(el("label", {}, el("span", { text: t("rulesGap") }), gap));
@@ -785,7 +882,7 @@ function saveState() {
   if (lastQuery) history.replaceState(null, "", "#" + h.toString());
 }
 function syncControls() {
-  const calv = state.view === "calendar", setupv = state.view === "setup" || state.view === "phone";
+  const calv = state.view === "calendar", setupv = ["setup", "phone", "settings"].includes(state.view);
   document.getElementById("filters").hidden = setupv;
   document.querySelectorAll("#views button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === state.view)));
   document.querySelectorAll("#ranges button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.r === state.range)));
@@ -819,10 +916,10 @@ async function load() {
     renderSetup();
     return;
   }
-  if (state.view === "phone") {
+  if (state.view === "phone" || state.view === "settings") {
     if (!META) setMeta(await api("/api/meta"));
-    history.replaceState(null, "", "#phone");
-    renderPhone();
+    history.replaceState(null, "", "#" + state.view);
+    state.view === "phone" ? renderPhone() : renderSettings();
     return;
   }
   document.getElementById("app").classList.add("loading");
@@ -877,25 +974,28 @@ const shift = n => {
 };
 document.getElementById("prev").addEventListener("click", () => shift(-1));
 document.getElementById("next").addEventListener("click", () => shift(1));
-document.getElementById("setupBtn").addEventListener("click", () => { state.view = "setup"; wiz.step = 0; load(); });
+document.getElementById("setupBtn").addEventListener("click", () => { state.view = "settings"; load(); });
+document.querySelectorAll("#themes button").forEach(b => b.addEventListener("click", () => setTheme(b.dataset.m)));
 document.getElementById("phoneBtn").addEventListener("click", () => { state.view = "phone"; load(); });
-document.querySelectorAll("#langs button").forEach(b => b.addEventListener("click", async () => {
-  if (b.dataset.l === LANG) return;
-  if (!window.TT_READONLY) try { await post("settings", { lang: b.dataset.l }); } catch (e) { /* still switch locally */ }
-  LANG = b.dataset.l; if (META) META.lang = LANG; applyStatic(); syncControls();
+async function switchLang(l) {
+  if (l === LANG) return;
+  if (!window.TT_READONLY) try { await post("settings", { lang: l }); } catch (e) { /* still switch locally */ }
+  LANG = l; if (META) META.lang = LANG; applyStatic(); syncControls();
   if (state.view === "setup") renderSetup(); else if (state.view === "calendar") { calScrolledWeek = null; load(); } else load();
-}));
+}
+document.querySelectorAll("#langs button").forEach(b => b.addEventListener("click", () => switchLang(b.dataset.l)));
 let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (state.view === "calendar") cal && !cal.error && renderCalendar(); else if (state.view === "overview") data && render(); }, 150); });
 
 (async function boot() {
   try { Object.assign(state, JSON.parse(localStorage.getItem("tt-dash") || "{}")); } catch (e) {}
-  if (state.view === "setup" || state.view === "phone") state.view = "overview";
+  if (["setup", "phone", "settings"].includes(state.view)) state.view = "overview";
   try { setMeta(await api("/api/meta")); } catch (e) { /* load() will show the error */ }
   LANG = META ? META.lang : (navigator.language || "en").startsWith("zh") ? "zh" : "en";
   applyStatic();
   const hp = new URLSearchParams(location.hash.slice(1));
   const rw = !window.TT_READONLY;  // a phone link gets the overview and calendar only
   if (rw && location.hash.startsWith("#phone")) state.view = "phone";
+  else if (rw && location.hash.startsWith("#settings")) state.view = "settings";
   else if (rw && (location.hash.startsWith("#setup") || (META && !META.setup_done && !location.hash))) {
     state.view = "setup";
     const n = parseInt(location.hash.split("/")[1], 10);  // #setup/4 opens step 4
