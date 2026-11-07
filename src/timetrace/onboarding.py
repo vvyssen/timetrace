@@ -13,6 +13,11 @@ from . import aw, classify as C, config, intervals as I, paths, settings
 # Windows that only matched a broad guess are worth asking about: an app-level fallback for a browser,
 # terminal or editor (whatever the rule is called), or an unresolved agent session.
 BROWSERS = {"safari", "google chrome", "arc", "firefox", "microsoft edge", "dia", "brave browser", "opera", "vivaldi", "orion", "zen"}
+# A keyword tag only applies within its app family: a project folder seen in a terminal should not
+# also capture, say, a password manager whose window title happens to contain the same word.
+BROWSER_APPS = ["Safari", "Google Chrome", "Arc", "Firefox", "Microsoft Edge", "Dia", "Brave Browser", "Opera", "Vivaldi", "Orion", "Zen"]
+DEV_APPS = ["Terminal", "iTerm2", "Ghostty", "Warp", "Alacritty", "kitty", "WezTerm",
+            "Code", "Visual Studio Code", "Cursor", "Windsurf", "Zed", "Xcode", "PyCharm", "IntelliJ IDEA"]
 GENERIC_APPS = BROWSERS | C.TERMINALS | C.EDITORS
 
 
@@ -154,7 +159,8 @@ def candidates(days=14, limit=20, review=8):
                 if not key or key in ("(untitled)", "~"):
                     continue
                 label = f"{r['app']} · {key}"
-            bump(("mac_context", key), {"kind": "mac_context", "app": r["app"], "keyword": key, "label": label, "needs_tag": True}, r)
+            family = BROWSER_APPS if r["app"].lower() in BROWSERS else DEV_APPS if r["app"].lower() in (C.TERMINALS | C.EDITORS) else [r["app"]]
+            bump(("mac_context", key), {"kind": "mac_context", "app": r["app"], "keyword": key, "label": label, "apps": family, "needs_tag": True}, r)
         else:
             bump(("mac_app", r["app"]), {"kind": "mac_app", "app": r["app"], "label": r["app"], "needs_tag": False}, r)
 

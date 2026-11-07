@@ -512,7 +512,7 @@ async function stepTag(body) {
   saveBtn.addEventListener("click", async () => {
     const tags = Object.values(wiz.edits).map(({ g, st }) => st.ignore
       ? { kind: g.kind, bundle: g.bundle, app: g.app, ignore: true }
-      : { kind: g.kind, bundle: g.bundle, app: g.app, keyword: st.keyword, domain: st.dom, subdomain: st.sub, evaluation: st.ev, project: st.project })
+      : { kind: g.kind, bundle: g.bundle, app: g.app, apps: g.apps, keyword: st.keyword, domain: st.dom, subdomain: st.sub, evaluation: st.ev, project: st.project })
       .filter(x => x.ignore || (x.domain && x.evaluation));
     if (!tags.length) return;
     saveBtn.disabled = true; saveBtn.textContent = t("saving");

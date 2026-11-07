@@ -145,3 +145,11 @@ def test_config_hot_reload_and_legacy_import(tt):
     import os
     os.utime(paths.CONFIG, (time.time() + 5, time.time() + 5))
     assert "新" in config.get()["domains"]["工作"]
+
+
+def test_keyword_tag_stays_in_its_app_family(tt):
+    O, C = tt["O"], tt["C"]
+    O.apply_tags([{"kind": "mac_context", "keyword": "wissen", "apps": O.DEV_APPS,
+                   "domain": "生活", "subdomain": "个人项目", "evaluation": "创造", "project": "个人项目"}])
+    assert C.classify_mac("Terminal", "wissen — zsh")["project"] == "个人项目"
+    assert C.classify_mac("1Password", "wissen — All Items")["rule"] == "passwords"
