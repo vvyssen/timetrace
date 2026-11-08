@@ -10,6 +10,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from . import paths, settings
@@ -147,10 +148,20 @@ def _domain():
 def load(name, pl):
     path = plist_path(pl["Label"])
     path.parent.mkdir(parents=True, exist_ok=True)
-    _run(["launchctl", "bootout", f"{_domain()}/{pl['Label']}"])
+    target = f"{_domain()}/{pl['Label']}"
+    _run(["launchctl", "bootout", target])
     with open(path, "wb") as f:
         plistlib.dump(pl, f)
-    r = _run(["launchctl", "bootstrap", _domain(), str(path)])
+    # bootout returns before the old job is gone; bootstrapping too soon fails with "5: Input/output error"
+    for _ in range(50):
+        if _run(["launchctl", "print", target]).returncode != 0:
+            break
+        time.sleep(0.1)
+    for attempt in range(3):
+        r = _run(["launchctl", "bootstrap", _domain(), str(path)])
+        if r.returncode == 0:
+            break
+        time.sleep(1)
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
