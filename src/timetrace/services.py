@@ -22,7 +22,7 @@ IMPORTER_SPEC = f"git+https://github.com/ActivityWatch/aw-import-screentime@{IMP
 
 def labels():
     p = settings.LABEL_PREFIX
-    return {"dashboard": f"{p}.dashboard", "importer": f"{p}.importer"}
+    return {"dashboard": f"{p}.dashboard", "importer": f"{p}.importer", "docs": f"{p}.docs"}
 
 
 def plist_path(label):
@@ -129,7 +129,15 @@ def plists():
         "EnvironmentVariables": {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin:" + str(paths.HOME / ".local" / "bin")},
         "StandardOutPath": str(paths.LOGS / "importer.log"), "StandardErrorPath": str(paths.LOGS / "importer.log"),
     }
-    return {"dashboard": dash, "importer": imp}
+    # which files PDF / editor windows show: read the guarded Open Recent lists with the helper's access
+    docs = {
+        "Label": lb["docs"],
+        "ProgramArguments": [str(HELPER_APP / "Contents" / "MacOS" / "timetrace-importer"), "--status", str(paths.DOCS_STATUS), "--",
+                             sys.executable, "-m", "timetrace.docsnap"],
+        "RunAtLoad": True, "StartInterval": 300, "ProcessType": "Background", "LowPriorityIO": True,
+        "StandardOutPath": str(paths.LOGS / "docs.log"), "StandardErrorPath": str(paths.LOGS / "docs.log"),
+    }
+    return {"dashboard": dash, "importer": imp, "docs": docs}
 
 
 def _domain():

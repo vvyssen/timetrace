@@ -372,7 +372,7 @@ def build_parser():
 
     sv = sub.add_parser("service", help="background services")
     sv.add_argument("action", choices=["status", "restart", "plist"], nargs="?", default="status")
-    sv.add_argument("name", nargs="?", choices=["dashboard", "importer"])
+    sv.add_argument("name", nargs="?", choices=["dashboard", "importer", "docs"])
     sv.set_defaults(func=cmd_service)
 
     sa = sub.add_parser("sync-aw", help="mirror your domain tree into ActivityWatch's categories (optional)")

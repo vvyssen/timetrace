@@ -130,8 +130,9 @@ MCP 工具有：`summary`、`timeline`、`query`、`schema`、`taxonomy`、`sugg
 
 - **Timetrace Importer.app** 是一个约 70 KB 的启动器。它持有完全磁盘访问权限，负责运行 `aw-import-screentime watch`。还没授权时，它会一直等待，并把状态报告给看板。
 - 终端窗口标题只显示「OpenCode」时，会按当时活跃的 opencode 会话判断是哪个项目，所以 Agent 会话也能归到正确的项目下。
+- PDF 和编辑器窗口的标题只有文件名。如果除了 App 级规则没有别的规则命中，timetrace 会去 macOS 给每个 App 记的「最近打开」列表里按文件名查出完整路径，再用路径匹配一遍规则。这样一个 `ClientWork` 关键词就能覆盖这个文件夹里的所有文件。这些列表在受保护的目录里，所以由小助手每 5 分钟复制一份；匹配到的路径会记在 `doc-paths.json` 里，macOS 把它从列表里挤掉后也不会丢。
 - 看板只监听 127.0.0.1，会校验 Host，每次写操作都需要启动时生成的令牌。
-- 后台服务是两个 launchd 任务：`com.github.vvyssen.timetrace.dashboard` 和 `…importer`，日志在 `~/Library/Logs/timetrace/`。
+- 后台服务是三个 launchd 任务：`com.github.vvyssen.timetrace.dashboard`、`…importer`，以及每 5 分钟复制一次「最近打开」列表的 `…docs`，日志在 `~/Library/Logs/timetrace/`。
 
 ## 局限
 

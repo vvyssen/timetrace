@@ -18,6 +18,11 @@ STATIC = PKG / "dashboard" / "static"
 HELPER = PKG / "helper"
 
 OPENCODE_DB = HOME / ".local" / "share" / "opencode" / "opencode.db"
+# each app's "Open Recent" list, with full paths (one .sfl4 per bundle id)
+RECENT_DOCS = HOME / "Library" / "Application Support" / "com.apple.sharedfilelist" / "com.apple.LSSharedFileList.ApplicationRecentDocuments"
+DOC_PATHS = SUPPORT / "doc-paths.json"      # file name -> path once matched, kept after macOS forgets it
+RECENT_SNAPSHOT = SUPPORT / "recent-docs.json"  # copy of those lists, written by the Full Disk Access helper
+DOCS_STATUS = SUPPORT / "docs-status.json"
 BIOME_SYNC_DB = HOME / "Library" / "Biome" / "sync" / "sync.db"
 
 

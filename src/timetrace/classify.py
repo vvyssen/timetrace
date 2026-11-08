@@ -2,13 +2,18 @@
 import bisect
 import collections
 import datetime as dt
+import json
 import os
+import plistlib
 import re
 import sqlite3
+import struct
+import time
 
 from . import config, paths
 
 TERMINALS = {"terminal", "iterm2", "ghostty", "warp", "alacritty", "kitty", "wezterm"}
+BROWSERS = {"safari", "google chrome", "arc", "firefox", "microsoft edge", "dia", "brave browser", "opera", "vivaldi", "orion", "zen"}
 EDITORS = {"code", "cursor", "visual studio code", "xcode", "pycharm", "intellij idea", "zed", "windsurf"}
 APP_SUFFIXES = [
     "Google Chrome", "Mozilla Firefox", "Safari", "Microsoft Edge", "Arc", "Dia", "Brave",
@@ -80,18 +85,31 @@ def classify_ios(bundle, name, cfg=None):
     return _cls(u, "", name, u)
 
 
-def classify_mac(app, title, cfg=None):
-    cfg = cfg or config.get()
-    u = cfg["uncategorized"]
+ANY_TITLE = ("", ".", ".*")
+
+
+def _match(app, title, cfg):
     for r in cfg["mac_rules"]:
         apps = r.get("apps", [])
         if "*" not in apps and app not in apps:
             continue
         pat = r.get("title_re", "")
         # "." means "any title" (re.search(".", "") is None, so empty titles would otherwise fall through)
-        if pat in ("", ".", ".*") or re.search(pat, title or "", re.I):
-            return _cls(r.get("domain", u), r.get("subdomain", ""), r.get("project", app), r.get("evaluation", u), r.get("name"))
-    return _cls(u, "", app, u)
+        if pat in ANY_TITLE or re.search(pat, title or "", re.I):
+            return r
+    return None
+
+
+def _of_rule(r, app, cfg):
+    u = cfg["uncategorized"]
+    if r is None:
+        return _cls(u, "", app, u)
+    return _cls(r.get("domain", u), r.get("subdomain", ""), r.get("project", app), r.get("evaluation", u), r.get("name"))
+
+
+def classify_mac(app, title, cfg=None):
+    cfg = cfg or config.get()
+    return _of_rule(_match(app, title, cfg), app, cfg)
 
 
 # ---- opencode: a terminal titled just "OpenCode" hides the project; recover it from opencode's own
@@ -131,10 +149,119 @@ def opencode_dir_at(start, end, lead=1800, lag=900):
     return collections.Counter(_oc["dirs"][i:j]).most_common(1)[0][0]
 
 
+# ---- documents: a PDF or editor window shows only the file name. macOS keeps each app's recently
+# opened files with full paths, so a rule can also match the folder (e.g. everything under ClientWork/).
+DOC_PATH_RULE = "doc-path"
+_docs = {"t": 0.0, "name": {}, "stem": {}, "saved": {}}
+
+
+def bookmark_path(b):
+    """The path inside a macOS bookmark blob ('book' header): the string array under key 0x1004."""
+    if b[:4] != b"book":
+        return None
+    base = struct.unpack_from("<I", b, 12)[0]
+    toc = base + struct.unpack_from("<I", b, base)[0]
+    count = struct.unpack_from("<I", b, toc + 16)[0]
+    for i in range(count):
+        key, off, _ = struct.unpack_from("<III", b, toc + 20 + 12 * i)
+        if key != 0x1004:
+            continue
+        n, typ = struct.unpack_from("<II", b, base + off)
+        if typ != 0x0601:
+            return None
+        parts = []
+        for j in range(n // 4):
+            so = base + struct.unpack_from("<I", b, base + off + 8 + 4 * j)[0]
+            sn = struct.unpack_from("<I", b, so)[0]
+            parts.append(b[so + 8:so + 8 + sn].decode("utf-8"))
+        return "/" + "/".join(parts)
+    return None
+
+
+def recent_docs():
+    """File name -> path from every app's Open Recent list, or None when this process may not read
+    them (macOS guards the folder: the launchd dashboard reads the helper's snapshot instead)."""
+    try:
+        files = sorted(f for f in os.listdir(paths.RECENT_DOCS) if ".sfl" in f)
+    except FileNotFoundError:
+        return {}
+    except OSError:
+        return None
+    out = {}
+    for f in files:
+        try:
+            objs = plistlib.loads((paths.RECENT_DOCS / f).read_bytes()).get("$objects", [])
+        except Exception:
+            continue
+        for o in objs:
+            try:
+                p = isinstance(o, bytes) and bookmark_path(o)
+            except Exception:  # struct.error / bad utf-8: skip one malformed bookmark
+                p = None
+            if p:
+                out.setdefault(os.path.basename(p), p)
+    return out
+
+
+def _read_json(path):
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def _load_docs(ttl=60):
+    if time.time() - _docs["t"] < ttl:
+        return
+    _docs["saved"] = _read_json(paths.DOC_PATHS)  # re-read: the CLI and the dashboard both add to it
+    recent = recent_docs()
+    if recent is None:
+        recent = _read_json(paths.RECENT_SNAPSHOT)
+    name = {**_docs["saved"], **recent}  # what macOS lists now wins over what we remembered
+    _docs.update(t=time.time(), name=name, stem={os.path.splitext(n)[0]: p for n, p in name.items()})
+
+
+def _remember(name, path):
+    """Keep a matched file: macOS lists only the last few files per app."""
+    if _docs["saved"].get(name) == path:
+        return
+    saved = {**_read_json(paths.DOC_PATHS), name: path}
+    _docs["saved"] = saved
+    try:
+        paths.DOC_PATHS.parent.mkdir(parents=True, exist_ok=True)
+        tmp = paths.DOC_PATHS.with_suffix(f".{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(saved, ensure_ascii=False, indent=0))
+        os.replace(tmp, paths.DOC_PATHS)
+    except OSError:
+        pass
+
+
+def doc_path(title):
+    """Full path of the document a window title names ('x.pdf – Page 2 of 9', 'x - Locked'), or None."""
+    t = (title or "").strip()
+    if not t:
+        return None
+    _load_docs()
+    for cand in dict.fromkeys((t, re.split(r"\s+[—–-]\s+", t)[0].strip())):
+        p = _docs["name"].get(cand) or _docs["stem"].get(cand)
+        if p:
+            _remember(os.path.basename(p), p)
+            return p
+    return None
+
+
 def classify_mac_at(app, title, start, end, cfg=None):
     cfg = cfg or config.get()
-    cls = classify_mac(app, title, cfg)
+    r = _match(app, title, cfg)
+    cls = _of_rule(r, app, cfg)
     if cls.get("rule") != OPENCODE_GENERIC_RULE:
+        a = (app or "").lower()
+        # only when nothing but an app-level fallback matched; browsers and terminals name pages, not files
+        if (r is None or r.get("title_re", "") in ANY_TITLE) and a not in TERMINALS and a not in BROWSERS:
+            p = doc_path(title)
+            alt = classify_mac(app, f"{title} — {p}", cfg) if p else None
+            if alt and alt["rule"] != cls["rule"]:
+                return {**alt, "rule": f"{DOC_PATH_RULE}>{alt['rule']}"}
         return cls
     d = opencode_dir_at(start, end)
     if not d:

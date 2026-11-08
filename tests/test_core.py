@@ -21,6 +21,7 @@ def tt(tmp_path, monkeypatch):
         importlib.reload(m)
     monkeypatch.setattr(settings, "system_lang", lambda: "zh")
     monkeypatch.setattr(paths, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(paths, "RECENT_DOCS", tmp_path / "recent")
     config._cache.update(mtime=None, cfg=None)
     config.init(lang="zh")
     return {"paths": paths, "config": config, "C": classify, "O": onboarding, "settings": settings, "tmp": tmp_path}
@@ -124,6 +125,67 @@ def test_opencode_session_recovers_project(tt):
     assert c["rule"].startswith(C.OPENCODE_GENERIC_RULE + ">")
     far = T0 + dt.timedelta(days=3)
     assert C.classify_mac_at("Ghostty", "OpenCode", far, far)["rule"] == C.OPENCODE_GENERIC_RULE
+
+
+def bookmark(path):
+    """A minimal macOS bookmark blob: path components (key 0x1004) as a string array."""
+    import struct
+    data, offs = bytearray(4), []  # 4 bytes reserved for the first-TOC offset
+    for part in path.strip("/").split("/"):
+        raw = part.encode()
+        offs.append(len(data))
+        data += struct.pack("<II", len(raw), 0x0101) + raw + b"\0" * (-len(raw) % 4)
+    arr = len(data)
+    data += struct.pack("<II", 4 * len(offs), 0x0601) + b"".join(struct.pack("<I", o) for o in offs)
+    toc = len(data)
+    data += struct.pack("<IIIII", 20, 0xFFFFFFFE, 1, 0, 1) + struct.pack("<III", 0x1004, arr, 0)
+    data[0:4] = struct.pack("<I", toc)
+    return b"book" + struct.pack("<III", 0x30 + len(data), 0x10040000, 0x30) + b"\0" * 32 + bytes(data)
+
+
+def test_document_folder_decides_when_only_the_app_matched(tt):
+    import plistlib
+    C, O, paths = tt["C"], tt["O"], tt["paths"]
+    client = "/Users/me/ClientWork/acme/报价单.pdf"
+    assert C.bookmark_path(bookmark(client)) == client
+    paths.RECENT_DOCS.mkdir(parents=True)
+    (paths.RECENT_DOCS / "com.readdle.pdfexpert-mac.sfl4").write_bytes(plistlib.dumps(
+        {"$objects": ["$null", bookmark(client), bookmark("/Users/me/Papers/main.pdf"), b"not a bookmark"]},
+        fmt=plistlib.FMT_BINARY))
+    O.apply_tags([{"kind": "mac_context", "keyword": "ClientWork", "domain": "工作", "subdomain": "客户项目", "evaluation": "保值"}])
+    O.apply_tags([{"kind": "mac_context", "keyword": "Papers", "domain": "学习", "subdomain": "科研", "evaluation": "提升"}])
+    at = lambda app, title: C.classify_mac_at(app, title, T0, T0)
+    # PDF Expert drops the extension and adds " - Locked"; Preview adds " – Page n of m"
+    c = at("PDF Expert", "报价单 - Locked")
+    assert (c["subdomain"], c["evaluation"], c["rule"]) == ("客户项目", "保值", "doc-path>user-title-ClientWork")
+    assert at("Preview", "报价单.pdf – Page 3 of 9")["subdomain"] == "客户项目"
+    assert at("Preview", "main.pdf – Page 1 of 2")["subdomain"] == "科研"
+    # unknown files, and browsers (page titles, not files), keep their normal rule
+    assert not at("Preview", "other.pdf – Page 1 of 1")["rule"].startswith("doc-path")
+    assert not at("Dia", "报价单")["rule"].startswith("doc-path")
+    # a matched file is remembered after it drops out of macOS's short recent list
+    (paths.RECENT_DOCS / "com.readdle.pdfexpert-mac.sfl4").unlink()
+    C._docs["t"] = 0
+    assert at("PDF Expert", "报价单")["subdomain"] == "客户项目"
+
+
+def test_without_access_the_helper_snapshot_is_used(tt, monkeypatch):
+    import json
+    import plistlib
+    import timetrace.docsnap as docsnap
+    import timetrace.services as services
+    C, O, paths = tt["C"], tt["O"], tt["paths"]
+    paths.RECENT_DOCS.mkdir(parents=True)
+    (paths.RECENT_DOCS / "com.apple.preview.sfl4").write_bytes(plistlib.dumps(
+        {"$objects": [bookmark("/Users/me/ClientWork/a.pdf")]}, fmt=plistlib.FMT_BINARY))
+    docsnap.main()  # what the helper runs every few minutes
+    assert json.loads(paths.RECENT_SNAPSHOT.read_text()) == {"a.pdf": "/Users/me/ClientWork/a.pdf"}
+    monkeypatch.setattr(C, "recent_docs", lambda: None)  # a launchd process without Full Disk Access
+    O.apply_tags([{"kind": "mac_context", "keyword": "ClientWork", "domain": "工作", "subdomain": "客户项目", "evaluation": "保值"}])
+    assert C.classify_mac_at("Preview", "a.pdf – Page 1 of 2", T0, T0)["subdomain"] == "客户项目"
+    job = services.plists()["docs"]
+    assert job["ProgramArguments"][0].endswith("Timetrace Importer.app/Contents/MacOS/timetrace-importer")
+    assert job["ProgramArguments"][-2:] == ["-m", "timetrace.docsnap"] and job["StartInterval"] == 300
 
 
 def test_config_hot_reload_and_legacy_import(tt):

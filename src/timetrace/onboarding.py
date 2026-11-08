@@ -12,7 +12,7 @@ from . import aw, classify as C, config, intervals as I, paths, settings
 
 # Windows that only matched a broad guess are worth asking about: an app-level fallback for a browser,
 # terminal or editor (whatever the rule is called), or an unresolved agent session.
-BROWSERS = {"safari", "google chrome", "arc", "firefox", "microsoft edge", "dia", "brave browser", "opera", "vivaldi", "orion", "zen"}
+BROWSERS = C.BROWSERS
 # A keyword tag only applies within its app family: a project folder seen in a terminal should not
 # also capture, say, a password manager whose window title happens to contain the same word.
 BROWSER_APPS = ["Safari", "Google Chrome", "Arc", "Firefox", "Microsoft Edge", "Dia", "Brave Browser", "Opera", "Vivaldi", "Orion", "Zen"]

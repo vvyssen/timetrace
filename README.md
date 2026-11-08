@@ -133,8 +133,9 @@ iPhone/iPad ──► Screen Time sync ──► Timetrace Importer ─┴► Ac
 
 - **Timetrace Importer.app** is a ~70 KB launcher that holds Full Disk Access and runs `aw-import-screentime watch`. Until access is granted it waits and reports its state to the dashboard.
 - A terminal titled just “OpenCode” is attributed to the opencode session that was active at that moment, so agent sessions land in the right project.
+- A PDF or editor window shows only a file name. When nothing more specific than the app rule matches, timetrace looks the name up in macOS's per-app *Open Recent* lists and matches your rules against the full path too, so a keyword like `ClientWork` covers every file in that folder. The lists sit in a protected folder, so the helper copies them every 5 minutes; a matched path is remembered in `doc-paths.json` after macOS drops it from its short list.
 - The dashboard only listens on 127.0.0.1, checks the Host header, and needs a per-start token for any write.
-- Background services: `launchd` agents `com.github.vvyssen.timetrace.dashboard` and `…importer`; logs in `~/Library/Logs/timetrace/`.
+- Background services: `launchd` agents `com.github.vvyssen.timetrace.dashboard`, `…importer` and `…docs` (the 5-minute Open Recent copy); logs in `~/Library/Logs/timetrace/`.
 
 ## Limits
 
