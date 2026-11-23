@@ -161,7 +161,7 @@ def cmd_install(a):
     for c in services.conflicts():
         print(f"warning: {c}")
     res = services.install(start=not a.no_start)
-    print(f"apps: {services.HELPER_APP}  {services.LAUNCHER_APP}" + ("  (importer helper rebuilt — grant Full Disk Access again)" if res["helper_rebuilt"] else ""))
+    print(f"apps: {services.HELPER_APP}  {paths.BUNDLE or services.LAUNCHER_APP}" + ("  (importer helper rebuilt — grant Full Disk Access again)" if res["helper_rebuilt"] else ""))
     for name, (ok_, msg) in res["services"].items():
         print(f"service {name}: {'running' if ok_ else 'FAILED ' + msg}")
 
@@ -170,7 +170,10 @@ def cmd_uninstall(a):
     from . import services
     services.uninstall(remove_apps=not a.keep_apps)
     print("removed background services" + ("" if a.keep_apps else " and apps") + f". Your data and rules stay in {paths.SUPPORT}.")
-    print("to remove the programs too: uv tool uninstall timetrace && uv tool uninstall aw-import-screentime")
+    if paths.BUNDLE:
+        print(f"to remove the program too: move {paths.BUNDLE} to the Trash")
+    else:
+        print("to remove the programs too: uv tool uninstall timetrace && uv tool uninstall aw-import-screentime")
 
 
 def cmd_service(a):

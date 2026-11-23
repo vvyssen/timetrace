@@ -31,6 +31,8 @@ def _which(name):
 
 
 def mcp_command():
+    if paths.BUNDLE_BIN:  # installed from Timetrace.app
+        return str(paths.BUNDLE_BIN / "timetrace-mcp")
     found = _which("timetrace-mcp")
     return found or str(paths.HOME / ".local" / "bin" / "timetrace-mcp")
 

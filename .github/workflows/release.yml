@@ -1,0 +1,75 @@
+# Builds Timetrace.app (Apple Silicon, Python bundled) plus the wheel, and publishes a GitHub release
+# whenever a v* tag is pushed (scripts/release.sh does the bump + tag + push).
+# Re-run it for an existing tag from the Actions tab or with: gh workflow run release -f tag=vX.Y.Z
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag: { description: 'existing tag, e.g. v0.1.0', required: true }
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-latest   # arm64
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.tag || github.ref }}', fetch-depth: 0 }
+      - uses: astral-sh/setup-uv@v5
+      - name: Check the tag matches the version
+        run: |
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"   # checkout drops the tag's annotation
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          P=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/timetrace/__init__.py)
+          [ "v$V" = "$TAG" ] && [ "$V" = "$P" ] || { echo "::error::pyproject $V / __init__ $P / tag $TAG disagree"; exit 1; }
+          echo "V=$V" >> "$GITHUB_ENV"
+      - name: Test
+        run: uv run --python 3.12 --extra test pytest -q
+      - name: Build Timetrace.app
+        run: ./scripts/build-app.sh
+      - name: Build wheel and sdist
+        run: uv build --out-dir dist
+      - name: Smoke-test the bundle
+        run: |
+          B=build/Timetrace.app/Contents/Resources/python/bin
+          $B/timetrace --version
+          $B/python3 -I -c "import timetrace.paths as p, aw_import_screentime, yaml; assert p.BUNDLE, p.BUNDLE"
+          codesign --verify --deep --strict build/Timetrace.app
+      - name: Release notes
+        run: |
+          (cd dist && shasum -a 256 * > SHA256SUMS)
+          git tag -l --format='%(contents:body)' "$TAG" > notes.md
+          cat >> notes.md <<NOTES
+
+          ## Install · 安装
+          **Mac with Apple Silicon (M1 or later), macOS 12+** · **Apple 芯片（M1 及以后）的 Mac，macOS 12 及以上**
+          1. Install [ActivityWatch](https://activitywatch.net/downloads/) first: Timetrace reads your Mac time from it.
+             先安装 [ActivityWatch](https://activitywatch.net/downloads/)，Timetrace 从它读取 Mac 上的使用记录。
+          2. Download **Timetrace-$V-arm64.zip**, unzip it, and drag **Timetrace.app** into **Applications**.
+             下载 **Timetrace-$V-arm64.zip**，解压，把 **Timetrace.app** 拖进「应用程序」。
+          3. The app is not notarized by Apple. Before the first launch, run this in Terminal:
+             App 没有经过 Apple 公证。第一次打开前，在终端运行：
+             \`\`\`
+             xattr -dr com.apple.quarantine /Applications/Timetrace.app
+             \`\`\`
+          4. Open Timetrace. It installs its background services, puts the \`timetrace\` command in ~/.local/bin, and opens the dashboard. Later launches just open the dashboard.
+             打开 Timetrace。它会安装后台服务，把 \`timetrace\` 命令放进 ~/.local/bin，然后打开看板。之后再打开就直接进看板。
+
+          To update, replace Timetrace.app with the new one and open it once. · 更新：用新的 Timetrace.app 替换旧的，再打开一次即可。
+
+          **Intel Mac, or prefer the terminal** · **Intel Mac 或习惯用终端**
+          \`\`\`
+          curl -fsSL https://raw.githubusercontent.com/vvyssen/timetrace/$TAG/install.sh | TIMETRACE_REF=$TAG bash
+          \`\`\`
+          NOTES
+      - name: Publish
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "Timetrace $V" --notes-file notes.md --verify-tag
+          fi

@@ -1,5 +1,6 @@
 """Where timetrace keeps its files. Override the data dir with TIMETRACE_HOME (used by tests)."""
 import os
+import sys
 from pathlib import Path
 
 HOME = Path.home()
@@ -16,6 +17,20 @@ PKG = Path(__file__).resolve().parent
 DATA = PKG / "data"
 STATIC = PKG / "dashboard" / "static"
 HELPER = PKG / "helper"
+
+
+def _bundle():
+    """The self-contained Timetrace.app we run from (its Python lives in Contents/Resources/python/bin), else None."""
+    exe = Path(sys.executable)
+    p = exe.parents
+    if len(p) > 4 and p[1].name == "python" and p[2].name == "Resources" and p[4].suffix == ".app" \
+            and (p[3] / "MacOS" / "Timetrace").exists():
+        return p[4]
+    return None
+
+
+BUNDLE = _bundle()                                     # set when installed from the Timetrace.app release
+BUNDLE_BIN = Path(sys.executable).parent if BUNDLE else None   # its python3 and the timetrace / timetrace-mcp wrappers
 
 OPENCODE_DB = HOME / ".local" / "share" / "opencode" / "opencode.db"
 # each app's "Open Recent" list, with full paths (one .sfl4 per bundle id)

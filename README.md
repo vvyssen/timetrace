@@ -22,6 +22,16 @@ Everything runs on your Mac. Nothing is uploaded.
 
 ## Install
 
+**App (Apple Silicon).** Install [ActivityWatch](https://activitywatch.net/downloads/) first. Then download `Timetrace-x.y.z-arm64.zip` from the [latest release](https://github.com/vvyssen/timetrace/releases/latest), unzip it, and drag **Timetrace.app** into Applications. Python and everything else is bundled. The app isn't notarized by Apple, so run this once before you open it:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Timetrace.app
+```
+
+Opening it installs the background services, links the `timetrace` and `timetrace-mcp` commands into `~/.local/bin` (unless you already have them), and opens the setup wizard. After that, opening it just opens the dashboard. To update, replace the app with a newer one and open it once.
+
+**Script (any Mac, including Intel).**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vvyssen/timetrace/main/install.sh | bash
 ```
@@ -148,9 +158,9 @@ iPhone/iPad ──► Screen Time sync ──► Timetrace Importer ─┴► Ac
 
 ```bash
 timetrace uninstall            # services and apps; keeps your data and rules
-uv tool uninstall timetrace && uv tool uninstall aw-import-screentime
+uv tool uninstall timetrace && uv tool uninstall aw-import-screentime   # script install
 ```
-Remove *Timetrace Importer* from Full Disk Access in System Settings, and delete `~/Library/Application Support/timetrace` if you want your rules gone too.
+If you installed the app, move Timetrace.app to the Trash instead of the second line. Remove *Timetrace Importer* from Full Disk Access in System Settings, and delete `~/Library/Application Support/timetrace` if you want your rules gone too.
 
 ## Development
 
@@ -159,7 +169,7 @@ git clone https://github.com/vvyssen/timetrace && cd timetrace
 uv venv && uv pip install -e ".[test]" && .venv/bin/python -m pytest
 TIMETRACE_SOURCE=$PWD ./install.sh   # install from your checkout
 ```
-The helper is plain C (`src/timetrace/helper/importer_launcher.c`); the dashboard is dependency-free HTML/JS/SVG.
+The helper is plain C (`src/timetrace/helper/importer_launcher.c`); the dashboard is dependency-free HTML/JS/SVG. `scripts/build-app.sh` builds the self-contained Timetrace.app. Releases are cut with `scripts/release.sh` (see [AGENTS.md](AGENTS.md)).
 
 ## Credits
 

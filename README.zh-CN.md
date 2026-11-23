@@ -22,6 +22,16 @@ timetrace 是 [ActivityWatch](https://activitywatch.net) 的伴侣工具。Activ
 
 ## 安装
 
+**App（Apple 芯片）。** 先安装 [ActivityWatch](https://activitywatch.net/downloads/)。然后从[最新版本](https://github.com/vvyssen/timetrace/releases/latest)下载 `Timetrace-x.y.z-arm64.zip`，解压，把 **Timetrace.app** 拖进「应用程序」。Python 和其他依赖都已经打包在里面。App 没有经过 Apple 公证，第一次打开前先在终端运行一次：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Timetrace.app
+```
+
+打开后它会安装后台服务，把 `timetrace` 和 `timetrace-mcp` 命令链接到 `~/.local/bin`（已经有的话不动），然后打开配置向导。之后再打开就直接进看板。更新时用新版 app 替换旧的，再打开一次即可。
+
+**脚本（任何 Mac，包括 Intel）。**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vvyssen/timetrace/main/install.sh | bash
 ```
@@ -145,10 +155,11 @@ MCP 工具有：`summary`、`timeline`、`query`、`schema`、`taxonomy`、`sugg
 
 ```bash
 timetrace uninstall            # 删除后台服务和两个应用，保留你的数据和规则
-uv tool uninstall timetrace && uv tool uninstall aw-import-screentime
+uv tool uninstall timetrace && uv tool uninstall aw-import-screentime   # 脚本安装时
 ```
 
 另外：
+- 如果装的是 app，第二行换成把 Timetrace.app 移到废纸篓。
 - 在系统设置的完全磁盘访问权限里，把 Timetrace Importer 移除。
 - 规则也不想要了的话，删除 `~/Library/Application Support/timetrace` 目录。
 

@@ -1,7 +1,9 @@
 """Install / remove the background pieces: two launchd agents and two tiny apps.
 
   Timetrace Importer.app  — holds Full Disk Access and runs the iPhone/iPad importer (launchd agent)
-  Timetrace.app           — opens the dashboard; findable with Spotlight ("Timetrace" / "时间看板")
+  Timetrace.app           — opens the dashboard; findable with Spotlight ("Timetrace" / "时间看板").
+                            When installed from the Timetrace.app release, that bundle is the launcher
+                            and no separate one is built.
   dashboard               — local web server on 127.0.0.1 (launchd agent)
 """
 import hashlib
@@ -79,7 +81,19 @@ def build_helper():
 
 
 # ---- Timetrace.app (dashboard launcher) ---------------------------------------------------------
+def _our_launcher():
+    try:
+        with open(LAUNCHER_APP / "Contents" / "Info.plist", "rb") as f:
+            return plistlib.load(f).get("CFBundleIdentifier") == f"{settings.LABEL_PREFIX}.launcher"
+    except Exception:
+        return False
+
+
 def build_launcher(port):
+    if paths.BUNDLE:  # the release app opens the dashboard itself; drop a launcher left by install.sh
+        if _our_launcher() and LAUNCHER_APP.resolve() != paths.BUNDLE.resolve():
+            shutil.rmtree(LAUNCHER_APP)
+        return
     if LAUNCHER_APP.exists():
         shutil.rmtree(LAUNCHER_APP)
     paths.APPS.mkdir(parents=True, exist_ok=True)
@@ -104,9 +118,11 @@ def build_launcher(port):
 
 
 # ---- launchd ----------------------------------------------------------------------------------
-def importer_bin():
+def importer_cmd():
+    if paths.BUNDLE:  # bundled with the app
+        return [sys.executable, "-m", "aw_import_screentime"]
     found = shutil.which("aw-import-screentime")
-    return found or str(paths.HOME / ".local" / "bin" / "aw-import-screentime")
+    return [found or str(paths.HOME / ".local" / "bin" / "aw-import-screentime")]
 
 
 def plists():
@@ -120,7 +136,7 @@ def plists():
         "StandardOutPath": str(paths.LOGS / "dashboard.log"), "StandardErrorPath": str(paths.LOGS / "dashboard.log"),
     }
     args = [str(HELPER_APP / "Contents" / "MacOS" / "timetrace-importer"), "--status", str(paths.IMPORTER_STATUS), "--",
-            importer_bin(), "watch"]
+            *importer_cmd(), "watch"]
     for sf in s.get("storefronts") or ["us"]:
         args += ["--storefront", sf]
     imp = {
@@ -216,5 +232,5 @@ def uninstall(remove_apps=True):
         unload(label)
     if remove_apps:
         for app in (HELPER_APP, LAUNCHER_APP):
-            if app.exists():
+            if app.exists() and not (paths.BUNDLE and app.resolve() == paths.BUNDLE.resolve()):
                 shutil.rmtree(app)
