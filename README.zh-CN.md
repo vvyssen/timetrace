@@ -22,7 +22,7 @@ timetrace 是 [ActivityWatch](https://activitywatch.net) 的伴侣工具。Activ
 
 ## 安装
 
-**App（Apple 芯片）。** 先安装 [ActivityWatch](https://activitywatch.net/downloads/)。然后从[最新版本](https://github.com/vvyssen/timetrace/releases/latest)下载 `Timetrace-x.y.z-arm64.zip`，解压，把 **Timetrace.app** 拖进「应用程序」。Python 和其他依赖都已经打包在里面。App 没有经过 Apple 公证，第一次打开前先在终端运行一次：
+**App（Apple 芯片）。** 先安装 [ActivityWatch](https://activitywatch.net/downloads/)。然后从[最新版本](https://github.com/vvyssen/timetrace/releases/latest)下载 `Timetrace-x.y.z-arm64.dmg`，打开后把 **Timetrace（时间看板）** 拖到旁边的「应用程序」文件夹上（也提供 `.zip`）。Python 和其他依赖都已经打包在里面。App 没有经过 Apple 公证，第一次打开前先在终端运行一次：
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Timetrace.app

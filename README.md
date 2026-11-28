@@ -22,7 +22,7 @@ Everything runs on your Mac. Nothing is uploaded.
 
 ## Install
 
-**App (Apple Silicon).** Install [ActivityWatch](https://activitywatch.net/downloads/) first. Then download `Timetrace-x.y.z-arm64.zip` from the [latest release](https://github.com/vvyssen/timetrace/releases/latest), unzip it, and drag **Timetrace.app** into Applications. Python and everything else is bundled. The app isn't notarized by Apple, so run this once before you open it:
+**App (Apple Silicon).** Install [ActivityWatch](https://activitywatch.net/downloads/) first. Then download `Timetrace-x.y.z-arm64.dmg` from the [latest release](https://github.com/vvyssen/timetrace/releases/latest), open it, and drag **Timetrace** onto the **Applications** folder next to it (a `.zip` is there too). Python and everything else is bundled. The app isn't notarized by Apple, so run this once before you open it:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Timetrace.app

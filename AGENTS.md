@@ -10,7 +10,7 @@ Never run `timetrace install`, or open a built Timetrace.app, on the user's own 
 
 ## Releasing
 
-A release is a `vX.Y.Z` tag on `main`. Pushing it runs `.github/workflows/release.yml`, which tests, builds `Timetrace-X.Y.Z-arm64.zip` plus the wheel and sdist, smoke-tests the bundle, and publishes the GitHub release with the tag message as its notes. Don't build or upload releases by hand.
+A release is a `vX.Y.Z` tag on `main`. Pushing it runs `.github/workflows/release.yml`, which tests, builds `Timetrace-X.Y.Z-arm64.dmg` (`scripts/make-dmg.sh`) and `.zip` plus the wheel and sdist, smoke-tests the bundle, and publishes the GitHub release with the tag message as its notes. Don't build or upload releases by hand.
 
 ```sh
 scripts/release.sh status                    # version, last tag, commits since then

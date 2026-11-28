@@ -1,4 +1,4 @@
-# Builds Timetrace.app (Apple Silicon, Python bundled) plus the wheel, and publishes a GitHub release
+# Builds Timetrace.app (Apple Silicon, Python bundled) as a DMG and a zip, plus the wheel, and publishes a GitHub release
 # whenever a v* tag is pushed (scripts/release.sh does the bump + tag + push).
 # Re-run it for an existing tag from the Actions tab or with: gh workflow run release -f tag=vX.Y.Z
 name: release
@@ -31,6 +31,8 @@ jobs:
         run: uv run --python 3.12 --extra test pytest -q
       - name: Build Timetrace.app
         run: ./scripts/build-app.sh
+      - name: Build the installer DMG
+        run: ./scripts/make-dmg.sh
       - name: Build wheel and sdist
         run: uv build --out-dir dist
       - name: Smoke-test the bundle
@@ -39,6 +41,7 @@ jobs:
           $B/timetrace --version
           $B/python3 -I -c "import timetrace.paths as p, aw_import_screentime, yaml; assert p.BUNDLE, p.BUNDLE"
           codesign --verify --deep --strict build/Timetrace.app
+          hdiutil verify "dist/Timetrace-$V-arm64.dmg"
       - name: Release notes
         run: |
           (cd dist && shasum -a 256 * > SHA256SUMS)
@@ -49,8 +52,8 @@ jobs:
           **Mac with Apple Silicon (M1 or later), macOS 12+** · **Apple 芯片（M1 及以后）的 Mac，macOS 12 及以上**
           1. Install [ActivityWatch](https://activitywatch.net/downloads/) first: Timetrace reads your Mac time from it.
              先安装 [ActivityWatch](https://activitywatch.net/downloads/)，Timetrace 从它读取 Mac 上的使用记录。
-          2. Download **Timetrace-$V-arm64.zip**, unzip it, and drag **Timetrace.app** into **Applications**.
-             下载 **Timetrace-$V-arm64.zip**，解压，把 **Timetrace.app** 拖进「应用程序」。
+          2. Download **Timetrace-$V-arm64.dmg**, open it, and drag **Timetrace** onto the **Applications** folder. (Or use the .zip: unzip and move Timetrace.app to Applications.)
+             下载 **Timetrace-$V-arm64.dmg**，打开后把 **Timetrace（时间看板）** 拖到「应用程序」文件夹上。（也可以用 .zip：解压后把 Timetrace.app 放进「应用程序」。）
           3. The app is not notarized by Apple. Before the first launch, run this in Terminal:
              App 没有经过 Apple 公证。第一次打开前，在终端运行：
              \`\`\`
